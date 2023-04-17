@@ -6,10 +6,11 @@ import random
 from collections import deque
 import time
 import matplotlib.pyplot as plt
-
+import os
 
 epi = 10000
-op_update = 1000
+# 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
+#  op_update = 1000
 CFenv = env.ConnectFourEnv()
 Qagent = env.ConnectFourDQNAgent()
 Qagent2 = env.ConnectFourDQNAgent(eps=1)
@@ -21,6 +22,19 @@ def board_normalization(arr):
     arr2[arr2 == 2] = -1
     return arr2
 
+def save_model(model, filename='DQNmodel'):
+    model_path = 'model/'+filename+'.pth'
+    if os.path.isfile(model_path):
+        overwrite = input('Overwrite existing model? (Y/n): ')
+        if overwrite == 'n':
+            new_name = input('Enter name of new model:')
+            model_path = 'model/'+new_name+'.pth'
+    
+
+    torch.save(model.state_dict(), 'model/'+filename+'.pth')
+
+def load_model(model, filename='DQNmodel'):
+    model.load_state_dict(torch.load('model/'+filename+'.pth'))
 
 CFenv.reset()
 
@@ -35,10 +49,10 @@ for i in range(epi):
     state = torch.from_numpy(state_).float()
     done = False
     while not done :
-        q_value = Qagent.policy_net(state)
-        q_value_ = q_value.data.numpy()
+        # q_value = Qagent.policy_net(state)
+        # q_value_ = q_value.data.numpy()
 
-        action = Qagent.select_action(state)
+        action = Qagent.select_action(state, valid_actions=CFenv.valid_actions)
         observation, reward, done =  CFenv.step(action)
         op_state_ = board_normalization(observation.flatten()) + np.random.randn(1, Qagent.state_size)
         op_state = torch.from_numpy(op_state_).float()
@@ -46,7 +60,7 @@ for i in range(epi):
             Qagent.append_memory(state,action, reward, op_state, done)
             break
 
-        op_action = Qagent2.select_action(op_state)
+        op_action = Qagent2.select_action(op_state,valid_actions=CFenv.valid_actions)
         op_observation, op_reward, op_done = CFenv.step(op_action)
         
         next_state_ = board_normalization(op_observation.flatten()) + np.random.randn(1, Qagent.state_size)
@@ -65,9 +79,9 @@ for i in range(epi):
         if done: break
 
     if Qagent.eps > 0.1: Qagent.eps -= (1/epi)
-    if i%op_update==0: 
-        Qagent2.policy_net.load_state_dict(Qagent.policy_net.state_dict())
-        Qagent2.eps = 0
+    # if i%op_update==0: 
+    #     Qagent2.policy_net.load_state_dict(Qagent.policy_net.state_dict())
+    #     Qagent2.eps = 0
 
 
 
@@ -97,7 +111,7 @@ if mode == '1':
             time.sleep(1)
             state_ = board_normalization(CFenv.board.flatten())
             state = torch.from_numpy(state_).float()
-            action = Qagent.select_action(state)
+            action = Qagent.select_action(state, valid_actions=CFenv.valid_actions)
             CFenv.step(action)
             CFenv.print_board()
 
@@ -108,4 +122,8 @@ if mode == '1':
 
     else: print("player {} win!".format(int(CFenv.win)))
 
+
+save = input("save model? (Y/n): ")
+if save != 'n':
+    save_model(Qagent.policy_net)
 

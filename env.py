@@ -18,6 +18,7 @@ class ConnectFourEnv:
         self.player = np.random.choice([1,2])
         self.win = 0
         self.done = False
+        self.valid_actions = [i for i in range(self.n_col)]
 
     def reverse_piece(self, board):
         board = np.where(
@@ -31,14 +32,17 @@ class ConnectFourEnv:
         self.player = np.random.choice([1,2])
         self.win = 0
         self.done = False
+        self.valid_actions = [i for i in range(self.n_col)]
 
     # col에 조각 떨어뜨리기 
     def step(self, action):
         col = action
         reward = 0
         # 떨어뜨리려는 곳이 이미 가득 차있을 때
+        # 로직을 바꿔서 이젠 이 if문은 실행되지 않을 것임 
         if not self.board[0,col] == 0:
             reward = -1
+            print("this cannot be happened")
         else:
             for row in range(self.n_row-1,-1,-1):
                 if self.board[row][col] == 0:
@@ -46,6 +50,10 @@ class ConnectFourEnv:
                     break
                 else: continue
         
+        if self.board[0,col] != 0:
+            if col in self.valid_actions:
+                self.valid_actions.remove(col)
+
         self.check_win()
         if self.win != 0:
             if self.win == 3: reward = -0.1
@@ -56,6 +64,21 @@ class ConnectFourEnv:
         self.change_player()
 
         return (self.board, reward, self.done)
+
+    def possible_next_states(self):
+        possible_states = []
+        for col in range(self.n_col):
+            cpy_board = copy.deepcopy(self.board)
+            if not cpy_board[0,col] == 0:
+                possible_states.append(cpy_board)
+            else:
+                for row in range(self.n_row-1,-1,-1):
+                    if cpy_board[row][col] == 0:
+                        cpy_board[row][col] = self.player
+                        break
+                    else: continue
+                possible_states.append(cpy_board)
+        return possible_states
 
     def change_player(self):
         self.player = int(2//self.player)
@@ -185,7 +208,7 @@ class CFAgent:
 
 # editable hyperparameters
 # let iter=10000, then
-# learning rate 0.1~0.0001
+# learning rate 0.01~0.0001
 # batch_size 2^5~2^10
 # hidden layer  2^6~2^9
 # memory_len  100~10000
@@ -193,7 +216,7 @@ class CFAgent:
 
 # op_update 0~2000 ( if 0, then opponent always act randomly)
 class ConnectFourDQNAgent:
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.0001, batch_size=128,hidden_size=128, target_update=50, eps=1., memory_len=1000):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.999, lr=0.0002, batch_size=256,hidden_size=256, target_update=100, eps=1., memory_len=2000):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.policy_net = nn.Sequential(
             nn.Linear(state_size, hidden_size),
@@ -219,17 +242,24 @@ class ConnectFourDQNAgent:
         self.batch_size = batch_size
         self.losses = []
         
-    def select_action(self, state):
+    def select_action(self, state, valid_actions=None):
+        if valid_actions is None:
+            valid_actions = range(self.action_size)
+
         if np.random.uniform() < self.eps:
-            return np.random.choice(self.action_size)
+            return np.random.choice(valid_actions)
         with torch.no_grad():
             state = torch.FloatTensor(state)  # .to(self.device)
             q_value = self.policy_net(state)
-            return q_value.argmax().item()
+            # print("state:",state)
+            # print("valid_actions:",valid_actions)
+            # print("q_value:",q_value)
+            valid_q_values = q_value.squeeze()[torch.tensor(valid_actions)]
+            return valid_actions[torch.argmax(valid_q_values)]
         
     def append_memory(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
-        
+    
     def replay(self):
         if len(self.memory) < self.batch_size:
             return
