@@ -17,6 +17,7 @@ while CF.win==0:
 
         CF.step_human(col)
     else:
+        # 현재 cpu는 random
         CF.step_cpu()
 
 

@@ -105,39 +105,39 @@ class ConnectFourEnv:
         print("player {}'s turn!".format(int(self.player)))
 
     # (x,y) 에서 8방향으로 적절한 좌표 3개를 제공 
-    def coor_for_8_direction(self, x, y):
-        coors = []
-        left, right, up, down = (False,)*4
-        # (x,y) 기준 오른쪽
-        if y+3<self.n_col:
-            right=True
-            coors.append(((x,y+1),(x,y+2),(x,y+3)))
-        # (x,y) 기준 왼쪽
-        if y-3>=0:
-            left=True
-            coors.append(((x,y-1),(x,y-2),(x,y-3)))
-        # (x,y) 기준 위 
-        if x-3>=0:
-            up=True
-            coors.append(((x-1,y),(x-2,y),(x-3,y)))
-        # (x,y) 기준 아래 
-        if x+3<self.n_row:
-            down=True
-            coors.append(((x+1,y),(x+2,y),(x+3,y)))
-        # (x,y) 기준 오른쪽 위 
-        if right and up:
-            coors.append(((x-1,y+1),(x-2,y+2),(x-3,y+3)))
-        # (x,y) 기준 오른쪽 아래 
-        if right and down:
-            coors.append(((x+1,y+1),(x+2,y+2),(x+3,y+3)))
-        # (x,y) 기준 왼쪽 위 
-        if left and up:
-            coors.append(((x-1,y-1),(x-2,y-2),(x-3,y-3)))
-        # (x,y) 기준 왼쪽 아래 
-        if left and down:
-            coors.append(((x+1,y-1),(x+2,y-2),(x+3,y-3)))
+    # def coor_for_8_direction(self, x, y):
+    #     coors = []
+    #     left, right, up, down = (False,)*4
+    #     # (x,y) 기준 오른쪽
+    #     if y+3<self.n_col:
+    #         right=True
+    #         coors.append(((x,y+1),(x,y+2),(x,y+3)))
+    #     # (x,y) 기준 왼쪽
+    #     if y-3>=0:
+    #         left=True
+    #         coors.append(((x,y-1),(x,y-2),(x,y-3)))
+    #     # (x,y) 기준 위 
+    #     if x-3>=0:
+    #         up=True
+    #         coors.append(((x-1,y),(x-2,y),(x-3,y)))
+    #     # (x,y) 기준 아래 
+    #     if x+3<self.n_row:
+    #         down=True
+    #         coors.append(((x+1,y),(x+2,y),(x+3,y)))
+    #     # (x,y) 기준 오른쪽 위 
+    #     if right and up:
+    #         coors.append(((x-1,y+1),(x-2,y+2),(x-3,y+3)))
+    #     # (x,y) 기준 오른쪽 아래 
+    #     if right and down:
+    #         coors.append(((x+1,y+1),(x+2,y+2),(x+3,y+3)))
+    #     # (x,y) 기준 왼쪽 위 
+    #     if left and up:
+    #         coors.append(((x-1,y-1),(x-2,y-2),(x-3,y-3)))
+    #     # (x,y) 기준 왼쪽 아래 
+    #     if left and down:
+    #         coors.append(((x+1,y-1),(x+2,y-2),(x+3,y-3)))
 
-        return coors 
+    #     return coors 
 
 
     # 승패가 결정됐는지 확인하는 함수
@@ -145,35 +145,67 @@ class ConnectFourEnv:
     # 1: player 1 win
     # 2: player 2 win
     # 3: draw 
+    # def check_win(self):
+
+    #     for x in range(self.n_row-1,-1,-1):
+    #         for y in range(self.n_col):
+    #             piece = self.board[x][y]
+    #             if piece == 0: continue
+
+    #             coor_list = self.coor_for_8_direction(x,y)
+    #             for coors in coor_list:
+    #                 # print("coors:",coors)
+    #                 if piece == self.board[coors[0]] == self.board[coors[1]] == self.board[coors[2]]:
+    #                     self.win = piece
+    #                     self.done = True
+    #                     return
+
+    #     if not 0 in self.board[0,:]:
+    #         self.win = 3
+        
+    #     if self.win != 0: self.done = True
+
+    # made by chatgpt and I edit little bit.
     def check_win(self):
-
-        for x in range(self.n_row-1,-1,-1):
-            for y in range(self.n_col):
-                piece = self.board[x][y]
-                if piece == 0: continue
-
-                coor_list = self.coor_for_8_direction(x,y)
-                for coors in coor_list:
-                    # print("coors:",coors)
-                    if piece == self.board[coors[0]] == self.board[coors[1]] == self.board[coors[2]]:
-                        self.win = piece
+        for i in range(self.n_row):
+            for j in range(self.n_col):
+                if self.board[i][j] == self.player:
+                    # horizontal
+                    if j + 3 < self.n_col and self.board[i][j+1] == self.board[i][j+2] == self.board[i][j+3] == self.player:
+                        self.win = self.player
                         self.done = True
                         return
-
+                    # vertical
+                    if i + 3 < self.n_row and self.board[i+1][j] == self.board[i+2][j] == self.board[i+3][j] == self.player:
+                        self.win = self.player
+                        self.done = True
+                        return
+                    # diagonal (down right)
+                    if i + 3 < self.n_row and j + 3 < self.n_col and self.board[i+1][j+1] == self.board[i+2][j+2] == self.board[i+3][j+3] == self.player:
+                        self.win = self.player
+                        self.done = True
+                        return
+                    # diagonal (up right)
+                    if i - 3 >= 0 and j + 3 < self.n_col and self.board[i-1][j+1] == self.board[i-2][j+2] == self.board[i-3][j+3] == self.player:
+                        self.win = self.player
+                        self.done = True
+                        return
+    
+        # no winner
         if not 0 in self.board[0,:]:
-            self.win = 3
+            self.win = 3  # 3 means the game is a draw
+            self.done = True
+
         
-        if self.win != 0: self.done = True
+
 
     def step_human(self, col):
         self.step(col)
         self.print_board()
 
-    # def step_cpu(self):
-    #     self.drop_piece(np.random.choice(range(self.n_col)))
-    #     self.change_player()
-    #     self.print_board()
-    #     self.check_win()
+    def step_cpu(self):
+        self.step(np.random.choice(range(self.n_col)))
+        self.print_board()
 
 class CFAgent:
     def __init__(self, env, lr=0.1, gamma=0.9, epsilon=0.1, policy='q-learning'):
@@ -216,10 +248,12 @@ class CFAgent:
 
 # op_update 0~2000 ( if 0, then opponent always act randomly)
 class ConnectFourDQNAgent:
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.999, lr=0.0002, batch_size=256,hidden_size=256, target_update=100, eps=1., memory_len=2000):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.0001, batch_size=256,hidden_size=64, target_update=100, eps=1., memory_len=2000):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.policy_net = nn.Sequential(
             nn.Linear(state_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -242,15 +276,18 @@ class ConnectFourDQNAgent:
         self.batch_size = batch_size
         self.losses = []
         
-    def select_action(self, state, valid_actions=None):
+    def select_action(self, state, valid_actions=None, player=1):
         if valid_actions is None:
             valid_actions = range(self.action_size)
 
         if np.random.uniform() < self.eps:
             return np.random.choice(valid_actions)
         with torch.no_grad():
-            state = torch.FloatTensor(state)  # .to(self.device)
-            q_value = self.policy_net(state)
+            # 2p이면 보드판을 반전시켜서 보이게 하여, 항상 같은 색깔을 보면서 학습 가능
+            if player == 2: state_ = -1 * state
+            else: state_ = state
+            state_ = torch.FloatTensor(state_)  # .to(self.device)
+            q_value = self.policy_net(state_)
             # print("state:",state)
             # print("valid_actions:",valid_actions)
             # print("q_value:",q_value)
@@ -306,6 +343,10 @@ class ConnectFourDQNAgent:
         
     def update_target_net(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())
+
+
+
+
 
 
 
