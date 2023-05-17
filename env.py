@@ -12,6 +12,56 @@ import torch.nn.functional as F
 def clear():
     os.system('cls' if os.name=='nt' else 'clear')
 
+# env의 board를 normalize 해주는 함수 
+# 2를 -1로 바꿔서 board를 -1~1로 바꿔줌
+def board_normalization(noise,env, flatten=True):
+    # cnn을 사용하지 않는다면, 2차원 board를 1차원으로 바꿔줘야됨 
+    if flatten:
+        arr = copy.deepcopy(env.board.flatten())
+    else: arr = copy.deepcopy(env.board)
+
+
+    """Replace all occurrences of 2 with -1 in a numpy array"""
+    arr[arr == 2] = -1
+    
+    # 2p이면 보드판을 반전시켜서 보이게 하여, 항상 같은 색깔을 보면서 학습 가능
+    if env.player == 2: arr = -1 * arr
+
+    if noise:
+        arr += np.random.randn(*arr.shape)/100.0
+
+    return arr
+
+# 두 모델의 승률을 비교하는 함수
+# n_battle 만큼 서로의 policy로 대결하여 
+# [model1's win, model2's win, draw] 리스트를 리턴 
+def compare_model(model1, model2, n_battle=10):
+    # epsilon을 복원하지 않으면, 학습 내내 고정됨 
+    eps1 = model1.eps
+    model1.eps = 0  # no exploration
+    models = [model1, model2]
+    records = [0,0,0]  # model1 win, model2 win, draw
+    comp_env = ConnectFourEnv()
+
+    for round in range(n_battle):
+        comp_env.reset()
+
+        while not comp_env.done:
+            # 성능 평가이므로, noise를 주지 않음 
+            # flatten 변수를 나중에 제거해야할듯? (agent 자체에 타입 부여 고려)
+            state_ = board_normalization(noise=False,env=comp_env, flatten=False)
+            state = torch.from_numpy(state_).float()
+            player = comp_env.player
+            action = models[player-1].select_action(state, valid_actions=comp_env.valid_actions, player=player)
+            comp_env.step(action)
+        
+        if comp_env.win == 1: records[0] += 1
+        elif comp_env.win == 2: records[1] += 1
+        else: records[2] += 1
+
+    model1.eps = eps1  # restore exploration
+
+    return records
 
 # 가장 기본적인 connect4 게임 환경 
 class ConnectFourEnv:
@@ -528,6 +578,123 @@ class ConnectFourDQNAgent_CNN(nn.Module):
     def append_memory(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
     
+    def train(self,epi,env,op_model):
+        env.reset()
+
+        # 1p는 Qmodels[1], 2p는 Qmodels[2] 로 직관적으로 사용하기 위해
+        models = [0, self, op_model]
+
+        for i in range(epi):
+            # 100번마다 loss, eps 등의 정보 표시
+            if i!=0 and i%100==0: 
+                env.print_board(clear_board=False)
+                print("epi:",i, ", agent's step:",self.steps)
+                # 얼마나 학습이 진행되었는지 확인하기 위해, 모델 성능 측정 
+                record = compare_model(self, op_model, n_battle=100)
+                print(record)
+                print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
+                print("loss:",sum(self.losses[-101:-1])/100.)
+                print("epsilon:",self.eps)
+
+            if i%self.target_update==0:
+                print("target net update")
+                self.update_target_net()
+            
+            env.reset()
+
+            state_ = board_normalization(noise=True, env=env, flatten=False)
+            state = torch.from_numpy(state_).float()
+            done = False
+
+            past_state, past_action, past_reward, past_done = state, None, None, done
+            
+            while not done:
+                player = env.player
+                op_player = 2//player
+
+                action = models[player].select_action(state, valid_actions=env.valid_actions, player=player)
+
+                observation, reward, done = env.step(action)
+                op_state_ = board_normalization(noise=True, env=env, flatten=False)
+                op_state = torch.from_numpy(op_state_).float() 
+
+                if past_action is not None:  # 맨 처음이 아닐 때 
+                    # 경기가 끝났을 때(중요한 경험)
+                    if done:
+                        repeat = 1
+                        # 중요한 경험일 때는 더 많이 memory에 추가해준다(optional)
+                        if reward > 0: repeat = 5
+                        for j in range(repeat):
+                            # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
+                            self.append_memory(state,action, reward, op_state*-1, done)
+                            # Qmodels[player].append_memory(state,action, reward, op_state*-1, done)
+                            # 내가 이겼으므로 상대는 음의 보상을 받음 
+                            #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
+                            self.append_memory(past_state, past_action, -reward, op_state, done)
+
+                        # print for debugging
+                        # print("for player")
+                        # print("state:\n",torch.round(state).int())
+                        # print("action:",action)
+                        # print("reward:",reward)
+                        # print("next_state\n",torch.round(op_state*-1).int())
+                        # print()
+                        # print("for opponent")
+                        # print("state:\n",torch.round(past_state).int())
+                        # print("action:",past_action)
+                        # print("reward:",-reward)
+                        # print("next_state\n",torch.round(op_state).int())
+                        # print()
+
+                    # 경기가 끝나지 않았다면
+                    else:
+                        self.append_memory(past_state, past_action, past_reward, op_state, past_done)
+                        # Qmodels[op_player].append_memory(past_state, past_action, past_reward, op_state, past_done)
+
+                        # print for debugging
+                        # print("for opponent")
+                        # print("state:\n",torch.round(past_state).int())
+                        # print("action:",past_action)
+                        # print("reward:",past_reward)
+                        # print("next_state\n",torch.round(op_state).int())
+                        # print()
+
+                
+                # op_action = Qmodels[player].select_action(op_state,valid_actions=CFenv.valid_actions, player=player)
+                # op_observation, op_reward, op_done = CFenv.step(op_action)
+                
+                # next_state_ = board_normalization(op_observation.flatten()) + np.random.randn(1, Qagent.state_size)/100.0
+                # next_state = torch.from_numpy(next_state_).float()
+                # # 2p가 돌을 놓자마자 끝남 
+                # if op_done:
+                #     Qmodels[player].append_memory(op_state,op_action, op_reward, next_state, op_done)
+                #     Qmodels[op_player].append_memory(state,action, -op_reward, next_state, op_done)
+                # else:
+                #     exp = (state, action, reward, next_state, done)
+                #     Qmodels[player].append_memory(*exp)
+
+                # info들 업데이트 해줌 
+                past_state = state
+                past_action = action
+                past_reward = reward
+                past_done = done
+                state = op_state
+                
+                # replay buffer 를 이용하여 mini-batch 학습
+                self.replay()
+                # if Qagent.memory and abs(Qagent.memory[-1][2])!=1:
+                #     print("state:\n",torch.round(Qagent.memory[-1][0]).int())
+                #     print("action:",Qagent.memory[-1][1])
+                #     print("reward:",Qagent.memory[-1][2])
+                #     print("next_state\n",torch.round(Qagent.memory[-1][3]).int())
+                    
+                # 게임이 끝났다면 나가기 
+                if done: break
+            # print("eps:",Qagent.eps)
+            # epsilon-greedy
+            # min epsilon을 가지기 전까지 episode마다 조금씩 낮춰준다(1 -> 0.1)
+            if self.eps > 0.1: self.eps -= (1/epi)
+
     # mini-batch로 업데이트 
     def replay(self):
         if len(self.memory) < self.batch_size*2:
