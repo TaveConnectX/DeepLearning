@@ -20,8 +20,12 @@ class ConnectFourEnv:
         self.n_col = n_col
         self.board = np.zeros((n_row, n_col))
         if first_player is None:
-            self.player = np.random.choice([1,2])
-        else: self.player = first_player
+            self.first_player = np.random.choice([1,2])
+            self.player = self.first_player
+        else: 
+            self.first_player = first_player
+            self.player = first_player
+
         # 만약 경기가 끝나면 win은 player 가 됨, 비길 경우 3 
         self.win = 0
         self.done = False
@@ -39,8 +43,11 @@ class ConnectFourEnv:
     # 게임이 끝났을 때 새로운 환경을 생성하는 대신 reset()으로 처리 
     def reset(self, first_player=None):
         self.board = np.zeros((self.n_row, self.n_col))
-        if first_player is None: self.player = np.random.choice([1,2])
-        else: self.player = first_player
+        if first_player is None: 
+            self.player = self.first_player
+        else:
+            self.first_player = first_player 
+            self.player = first_player
 
         self.win = 0
         self.done = False
@@ -73,11 +80,12 @@ class ConnectFourEnv:
         # action을 취한 후 승패 체크
         self.check_win()
         if self.win != 0:
-            # 비기면 -0.1점 (비겼을 때의 reward도 생각해봐야됨)
-            if self.win == 3: reward = -0.1
+            # 비기면 0점 (비겼을 때의 reward도 생각해봐야됨)
+            if self.win == 3: reward = 0
             # 이기면 +1점 
             elif self.player == self.win: reward = 1
-            # 진 agent에겐 train 과정에서 따로 negative reward를 부여하기 때문에 해당 elif 문은 필요 없음
+            # 진 agent에겐 train 과정에서 따로 negative reward를 부여하므로
+            # 해당 elif 문은 작동하지 않음 
             elif self.player != self.win: 
                 reward = -1
                 print("this cannot be happened")
@@ -372,6 +380,27 @@ class ConnectFourDQNAgent:
     def update_target_net(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
+
+# class 가독성을 놎이기 위해 network 부분만 따로 분리
+class CFLinear(nn.Module):
+    def __init__(self, state_size=6*7, action_size=7, hidden_size=64):
+        super(CFLinear,self).__init__()
+        self.linear1 = nn.Linear(state_size, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear3 = nn.Linear(hidden_size, action_size)
+
+        self.layers = [self.linear1, self.linear2, self.linear3]
+        for layer in self.layers:
+            if type(layer) in [nn.Conv2d, nn.Linear]:
+                init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
+            layer.cuda()
+        
+    def forward(self, x):
+        y = F.relu(self.linear1(x))
+        y = F.relu(self.linear2(y))
+        y = self.linear3(y)
+        return y.cuda()
+
 # class 가독성을 높이기 위해 network 부분만 따로 분리 
 class CFCNN(nn.Module):
     def __init__(self, action_size=7):
@@ -451,7 +480,7 @@ class ConnectFourDQNAgent_CNN(nn.Module):
         self.policy_net = CFCNN()
         # target network
         self.target_net = copy.deepcopy(self.policy_net)
-        
+        # deepcopy하면 파라미터 load를 안해도 되는거 아닌가? 일단 두자
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 

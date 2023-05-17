@@ -8,7 +8,7 @@ import time
 import matplotlib.pyplot as plt
 import os
 
-epi = 50000
+epi = 1000
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
@@ -16,10 +16,11 @@ Qagent = env.ConnectFourDQNAgent_CNN()  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
 Qagent2 = env.ConnectFourDQNAgent_CNN()  # 상대 agent
 losses = []  # loss 값 plot을 위한 list
-noise=False  # board를 normalize 할 때 noise 추가 여부.
+noise = False  # board를 normalize 할 때 noise 추가 여부.
 flatten = False  # cnn일 땐 False, linear일 땐 true
 target_update = 500  # target net을 update 하는 주기(단위: episode)
 
+# env의 board를 normalize 해주는 함수 
 # 2를 -1로 바꿔서 board를 -1~1로 바꿔줌
 def board_normalization(noise,env=CFenv, flatten=True):
     # cnn을 사용하지 않는다면, 2차원 board를 1차원으로 바꿔줘야됨 
