@@ -12,13 +12,19 @@ epi = 1000
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
-Qagent = env.ConnectFourDQNAgent_CNN()  #학습시킬 agent
+Qagent = env.ConnectFourDQNAgent(model_num=1)  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
-Qagent2 = env.ConnectFourDQNAgent_CNN()  # 상대 agent
-losses = []  # loss 값 plot을 위한 list
-noise = False  # board를 normalize 할 때 noise 추가 여부.
-flatten = False  # cnn일 땐 False, linear일 땐 true
-target_update = 500  # target net을 update 하는 주기(단위: episode)
+Qagent2 = env.ConnectFourDQNAgent(model_num=1)  # 상대 agent
+
+# DQNAgent class 에 내장
+# losses = []  # loss 값 plot을 위한 list
+
+# 구조 변경에 따른 삭제 예정
+# noise = False  # board를 normalize 할 때 noise 추가 여부.
+# flatten = False  # cnn일 땐 False, linear일 땐 true
+
+# train() 을 env.py에 추가함에 따라 필요 없어짐 
+# target_update = 500  # target net을 update 하는 주기(단위: episode)
 
 # env.py 로 이동
 # # env의 board를 normalize 해주는 함수 
@@ -106,11 +112,10 @@ else:
     print("Q2의 승률이 {}, Q2를 선택하겠습니다".format(record[1]/sum(record)))
     Qagent = Qagent2
 
-
 # for testing
 mode = input("put 1 for test:\n")
 if mode == '1':
-    Qagent.eps = 0
+    Qagent.eps = 0  # no exploration
     CFenv.reset()
     print("let's test model")
     CFenv.print_board()
@@ -133,7 +138,7 @@ if mode == '1':
             CFenv.step_human(col)
         else:
             time.sleep(1)
-            state_ = env.board_normalization(False,CFenv, flatten)
+            state_ = env.board_normalization(False,CFenv, Qagent.policy_net.model_type)
             state = torch.from_numpy(state_).float()
             action = Qagent.select_action(state, valid_actions=CFenv.valid_actions, player=CFenv.player)
             CFenv.step(action)

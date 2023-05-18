@@ -5,8 +5,17 @@ import copy
 from collections import deque
 import torch
 from torch import nn, optim
-import torch.nn.init as init
-import torch.nn.functional as F
+import time
+# models.py 분리 후 이동, 정상 작동하면 지울 듯 
+# import torch.nn.init as init
+# import torch.nn.functional as F
+from models import *
+
+
+models = {
+            1:CFLinear,
+            2:CFCNN,
+        }
 
 # console 창을 비우는 함수 
 def clear():
@@ -14,11 +23,12 @@ def clear():
 
 # env의 board를 normalize 해주는 함수 
 # 2를 -1로 바꿔서 board를 -1~1로 바꿔줌
-def board_normalization(noise,env, flatten=True):
+def board_normalization(noise,env, model_type):
     # cnn을 사용하지 않는다면, 2차원 board를 1차원으로 바꿔줘야됨 
-    if flatten:
+    if model_type == "Linear":
         arr = copy.deepcopy(env.board.flatten())
-    else: arr = copy.deepcopy(env.board)
+    elif model_type == "CNN": 
+        arr = copy.deepcopy(env.board)
 
 
     """Replace all occurrences of 2 with -1 in a numpy array"""
@@ -39,7 +49,7 @@ def compare_model(model1, model2, n_battle=10):
     # epsilon을 복원하지 않으면, 학습 내내 고정됨 
     eps1 = model1.eps
     model1.eps = 0  # no exploration
-    models = [model1, model2]
+    players = {1:model1, 2:model2}
     records = [0,0,0]  # model1 win, model2 win, draw
     comp_env = ConnectFourEnv()
 
@@ -48,11 +58,11 @@ def compare_model(model1, model2, n_battle=10):
 
         while not comp_env.done:
             # 성능 평가이므로, noise를 주지 않음 
-            # flatten 변수를 나중에 제거해야할듯? (agent 자체에 타입 부여 고려)
-            state_ = board_normalization(noise=False,env=comp_env, flatten=False)
+            turn = comp_env.player
+            state_ = board_normalization(noise=False,env=comp_env, model_type=players[turn].policy_net.model_type)
             state = torch.from_numpy(state_).float()
-            player = comp_env.player
-            action = models[player-1].select_action(state, valid_actions=comp_env.valid_actions, player=player)
+            
+            action = players[turn].select_action(state, valid_actions=comp_env.valid_actions, player=turn)
             comp_env.step(action)
         
         if comp_env.win == 1: records[0] += 1
@@ -62,6 +72,30 @@ def compare_model(model1, model2, n_battle=10):
     model1.eps = eps1  # restore exploration
 
     return records
+
+# model1과 model2의 policy에 따라
+# 어떻게 플레이 하는지를 직접 확인가능
+def simulate_model(model1, model2):
+    eps1 = model1.eps
+    model1.eps = 0  # no exploration
+    players = {1:model1, 2:model2}
+
+    test_env = ConnectFourEnv()
+
+    test_env.reset()
+    while not test_env.done:
+        turn = test_env.player
+        state_ = board_normalization(noise=False, env=test_env, model_type=players[turn].policy_net.model_type)
+        state = torch.from_numpy(state_).float()
+
+        action = players[turn].select_action(state, valid_actions=test_env.valid_actions, player=turn)
+        test_env.step(action)
+        test_env.print_board(clear_board=False)
+        print("{}p put piece on {}".format(turn, action))
+        time.sleep(1)   
+    print("winner is {}p".format(test_env.win))
+
+    model1.eps = eps1  # restore exploration
 
 # 가장 기본적인 connect4 게임 환경 
 class ConnectFourEnv:
@@ -94,6 +128,7 @@ class ConnectFourEnv:
     def reset(self, first_player=None):
         self.board = np.zeros((self.n_row, self.n_col))
         if first_player is None: 
+            self.first_player = np.random.choice([1,2])
             self.player = self.first_player
         else:
             self.first_player = first_player 
@@ -107,8 +142,8 @@ class ConnectFourEnv:
     def step(self, action):
         col = action
         # 경기가 끝나지 않을 때 negative reward 를 줄지 말지는 생각이 필요함 
-        # reward = -1/42.
-        reward = 0
+        reward = -1/43.
+        # reward = 0
         # 떨어뜨리려는 곳이 이미 가득 차있을 때
         # 로직을 바꿔서 이젠 이 if문은 실행되지 않을 것임 
         if not self.board[0,col] == 0:
@@ -370,6 +405,7 @@ class ConnectFourDQNAgent:
             valid_actions = range(self.action_size)
 
         if np.random.uniform() < self.eps:
+            
             return np.random.choice(valid_actions)
         with torch.no_grad():
             state_ = torch.FloatTensor(state).to(self.device)
@@ -431,103 +467,16 @@ class ConnectFourDQNAgent:
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
 
-# class 가독성을 놎이기 위해 network 부분만 따로 분리
-class CFLinear(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, hidden_size=64):
-        super(CFLinear,self).__init__()
-        self.linear1 = nn.Linear(state_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, action_size)
-
-        self.layers = [self.linear1, self.linear2, self.linear3]
-        for layer in self.layers:
-            if type(layer) in [nn.Conv2d, nn.Linear]:
-                init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
-            layer.cuda()
-        
-    def forward(self, x):
-        y = F.relu(self.linear1(x))
-        y = F.relu(self.linear2(y))
-        y = self.linear3(y)
-        return y.cuda()
-
-# class 가독성을 높이기 위해 network 부분만 따로 분리 
-class CFCNN(nn.Module):
-    def __init__(self, action_size=7):
-        super(CFCNN,self).__init__()
-        # self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(2,2), stride=1,padding=1)
-        # self.conv2 = nn.Conv2d(32,64,(2,2), stride=1, padding=1)
-        # self.conv3 = nn.Conv2d(64,64,(2,2), stride=1, padding=1)
-        
-        # self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(4,4), stride=1,padding=2)
-        # self.conv2 = nn.Conv2d(32,64,(4,4), stride=1, padding=1)
-        # self.conv3 = nn.Conv2d(64,64,(4,4), stride=1, padding=1)
-        # self.linear1 = nn.Linear(64*3*4, 64)
-        # self.linear2 = nn.Linear(64, action_size)
-
-        self.conv1 = nn.Conv2d(1,42,(4,4), stride=1, padding=2)
-        self.maxpool1 = nn.MaxPool2d(kernel_size=2,stride=2)
-        self.linear1 = nn.Linear(42*3*4, 42)
-        self.linear2 = nn.Linear(42, action_size)
-        
-        self.layers = [
-            self.conv1,
-            # self.conv2,
-            # self.conv3,
-            self.maxpool1,
-            self.linear1,
-            self.linear2
-        ]
-
-        # relu activation 함수를 사용하므로, He 가중치 사용
-        for layer in self.layers:
-            if type(layer) in [nn.Conv2d, nn.Linear]:
-                init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
-            layer.cuda()
-
-
-    def forward(self, x):
-        y = F.relu(self.conv1(x))
-        y = self.maxpool1(y)
-        y = y.flatten(start_dim=2)
-        # view로 채널 차원을 마지막으로 빼줌
-        # 정확한 이유는 나중에 알아봐야 할듯? 
-        y = y.view(y.shape[0], -1, 42)
-        y = y.flatten(start_dim=1)
-        y = F.relu(self.linear1(y))
-        y = self.linear2(y)
-        return y.cuda()
-
-    # def forward(self,x):
-    #     # (N, 1, 6,7)
-    #     y = F.relu(self.conv1(x))
-    #     # (N, 32, 7,8)
-    #     y = F.relu(self.conv2(y))
-    #     # (N, 64, 8,9)
-    #     y = F.relu(self.conv3(y))
-    #     # (N, 64, 9,10)
-    #     #print("shape x after conv:",y.shape)
-    #     y = y.flatten(start_dim=2)
-    #     # (N, 64, 90)
-    #     #print("shape x after flatten:",y.shape)
-    #     y = y.view(y.shape[0], -1, 64)
-    #     # (N, 90, 64)
-    #     #print("shape x after view:",y.shape)
-    #     y = y.flatten(start_dim=1)
-    #     # (N, 90*64)
-    #     y = F.relu(self.linear1(y))
-    #     # (N, 64)
-    #     y = self.linear2(y) # size N, 12
-    #     # (N, 12)
-    #     return y.cuda()
     
 
-class ConnectFourDQNAgent_CNN(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.003, batch_size=1024, target_update=1000, eps=1., memory_len=10000):
-        super(ConnectFourDQNAgent_CNN,self).__init__()
+class ConnectFourDQNAgent(nn.Module):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.001, batch_size=1024, target_update=2000, eps=1., memory_len=10000,model_num=1):
+        super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        self.policy_net = models[model_num]()
         # 실제 업데이트되는 network
-        self.policy_net = CFCNN()
+        # self.policy_net = CFCNN()
         # target network
         self.target_net = copy.deepcopy(self.policy_net)
         # deepcopy하면 파라미터 load를 안해도 되는거 아닌가? 일단 두자
@@ -557,7 +506,6 @@ class ConnectFourDQNAgent_CNN(nn.Module):
 
     #     return x
 
-        
     def select_action(self, state, valid_actions=None, player=1):
         if valid_actions is None:
             valid_actions = range(self.action_size)
@@ -566,7 +514,9 @@ class ConnectFourDQNAgent_CNN(nn.Module):
             return np.random.choice(valid_actions)
         with torch.no_grad():
             state_ = torch.FloatTensor(state).to(self.device)
-            state_ = state_.unsqueeze(0).unsqueeze(0)  # (6,7) -> (1,1,6,7)
+            # CNN일 때만 차원을 바꿔줌 
+            if self.policy_net.model_type == 'CNN':
+                state_ = state_.unsqueeze(0).unsqueeze(0)  # (6,7) -> (1,1,6,7)
             q_value = self.policy_net(state_)
             # print("state:",state)
             # print("valid_actions:",valid_actions)
@@ -581,8 +531,8 @@ class ConnectFourDQNAgent_CNN(nn.Module):
     def train(self,epi,env,op_model):
         env.reset()
 
-        # 1p는 Qmodels[1], 2p는 Qmodels[2] 로 직관적으로 사용하기 위해
-        models = [0, self, op_model]
+        # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
+        players = {1: self, 2: op_model}
 
         for i in range(epi):
             # 100번마다 loss, eps 등의 정보 표시
@@ -595,27 +545,27 @@ class ConnectFourDQNAgent_CNN(nn.Module):
                 print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
                 print("loss:",sum(self.losses[-101:-1])/100.)
                 print("epsilon:",self.eps)
+                # simulate_model() 을 실행시키면 직접 행동 관찰 가능
+                # simulate_model(self, op_model)
 
-            if i%self.target_update==0:
-                print("target net update")
-                self.update_target_net()
             
             env.reset()
 
-            state_ = board_normalization(noise=True, env=env, flatten=False)
+            state_ = board_normalization(noise=True, env=env, model_type=players[env.player].policy_net.model_type)
             state = torch.from_numpy(state_).float()
             done = False
 
             past_state, past_action, past_reward, past_done = state, None, None, done
             
             while not done:
-                player = env.player
-                op_player = 2//player
+                # 원래는 player, op_player 였지만, 직관적인 이해를 위해 수정 
+                turn = env.player
+                op_turn = 2//turn
 
-                action = models[player].select_action(state, valid_actions=env.valid_actions, player=player)
+                action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
 
                 observation, reward, done = env.step(action)
-                op_state_ = board_normalization(noise=True, env=env, flatten=False)
+                op_state_ = board_normalization(noise=True, env=env, model_type=players[turn].policy_net.model_type)
                 op_state = torch.from_numpy(op_state_).float() 
 
                 if past_action is not None:  # 맨 처음이 아닐 때 
@@ -626,38 +576,38 @@ class ConnectFourDQNAgent_CNN(nn.Module):
                         if reward > 0: repeat = 5
                         for j in range(repeat):
                             # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
-                            self.append_memory(state,action, reward, op_state*-1, done)
-                            # Qmodels[player].append_memory(state,action, reward, op_state*-1, done)
+                            if turn==1:
+                                self.append_memory(state,action, reward, op_state*-1, done)
+                                # print for debugging
+                                # print("for player")
+                                # print("state:\n",torch.round(state).reshape(6,7).int())
+                                # print("action:",action)
+                                # print("reward:",reward)
+                                # print("next_state\n",torch.round(op_state*-1).reshape(6,7).int())
+                                # print()
                             # 내가 이겼으므로 상대는 음의 보상을 받음 
                             #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
-                            self.append_memory(past_state, past_action, -reward, op_state, done)
+                            if turn==2:
+                                self.append_memory(past_state, past_action, -reward, op_state, done)
+                                # print for debugging
+                                # print("for opponent")
+                                # print("state:\n",torch.round(past_state).reshape(6,7).int())
+                                # print("action:",past_action)
+                                # print("reward:",-reward)
+                                # print("next_state\n",torch.round(op_state).reshape(6,7).int())
+                                # print()
 
-                        # print for debugging
-                        # print("for player")
-                        # print("state:\n",torch.round(state).int())
-                        # print("action:",action)
-                        # print("reward:",reward)
-                        # print("next_state\n",torch.round(op_state*-1).int())
-                        # print()
-                        # print("for opponent")
-                        # print("state:\n",torch.round(past_state).int())
-                        # print("action:",past_action)
-                        # print("reward:",-reward)
-                        # print("next_state\n",torch.round(op_state).int())
-                        # print()
 
                     # 경기가 끝나지 않았다면
-                    else:
+                    elif turn==2:  # 내 경험만 수집한다
                         self.append_memory(past_state, past_action, past_reward, op_state, past_done)
-                        # Qmodels[op_player].append_memory(past_state, past_action, past_reward, op_state, past_done)
-
                         # print for debugging
-                        # print("for opponent")
-                        # print("state:\n",torch.round(past_state).int())
-                        # print("action:",past_action)
-                        # print("reward:",past_reward)
-                        # print("next_state\n",torch.round(op_state).int())
-                        # print()
+                        print("for opponent")
+                        print("state:\n",torch.round(past_state).reshape(6,7).int())
+                        print("action:",past_action)
+                        print("reward:",past_reward)
+                        print("next_state\n",torch.round(op_state).reshape(6,7).int())
+                        print()
 
                 
                 # op_action = Qmodels[player].select_action(op_state,valid_actions=CFenv.valid_actions, player=player)
@@ -687,7 +637,7 @@ class ConnectFourDQNAgent_CNN(nn.Module):
                 #     print("action:",Qagent.memory[-1][1])
                 #     print("reward:",Qagent.memory[-1][2])
                 #     print("next_state\n",torch.round(Qagent.memory[-1][3]).int())
-                    
+                
                 # 게임이 끝났다면 나가기 
                 if done: break
             # print("eps:",Qagent.eps)
@@ -702,13 +652,21 @@ class ConnectFourDQNAgent_CNN(nn.Module):
         # batch size 만큼 랜덤으로 꺼낸다 
         minibatch = random.sample(self.memory, self.batch_size)
 
-        # state_batch.shape: (batch_size, 1, 6, 7)
-        state1_batch = torch.stack([s1 for (s1,a,r,s2,d) in minibatch]).unsqueeze(1).to(self.device)
+
+        if self.policy_net.model_type == 'Linear':
+            # state_batch.shape: (batch_size, 42)
+            state1_batch = torch.stack([s1 for (s1,a,r,s2,d) in minibatch]).to(self.device)
+            state2_batch = torch.stack([s2 for (s1,a,r,s2,d) in minibatch]).to(self.device)
+        elif self.policy_net.model_type == 'CNN':
+            # state_batch.shape: (batch_size, 1, 6, 7)
+            state1_batch = torch.stack([s1 for (s1,a,r,s2,d) in minibatch]).unsqueeze(1).to(self.device)
+            state2_batch = torch.stack([s2 for (s1,a,r,s2,d) in minibatch]).unsqueeze(1).to(self.device)
+
         # action_batch.shape: (batch_size, )
         action_batch = torch.Tensor([a for (s1,a,r,s2,d) in minibatch]).to(self.device)
         reward_batch = torch.Tensor([r for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        state2_batch = torch.stack([s2 for (s1,a,r,s2,d) in minibatch]).unsqueeze(1).to(self.device)
         done_batch = torch.Tensor([d for (s1,a,r,s2,d) in minibatch]).to(self.device)
+        
         # print("state1_batch:",state1_batch.shape)
         Q1 = self.policy_net(state1_batch)  # (256,7)
         with torch.no_grad():
@@ -753,10 +711,10 @@ class ConnectFourDQNAgent_CNN(nn.Module):
         # loss.backward()
         # self.optimizer.step()
         self.steps += 1
+        if self.steps % self.target_update == 0:
+            print("update target net")
+            self.update_target_net()
 
-        # 일단 episode 기준으로 target net update를 할 예정이므로 미적용 
-        # if self.steps % self.target_update == 0:
-        #     self.update_target_net()
         
     # target net에 policy net 파라미터 들을 업데이트 해줌 
     def update_target_net(self):
