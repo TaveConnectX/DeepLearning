@@ -15,6 +15,7 @@ from models import *
 models = {
             1:CFLinear,
             2:CFCNN,
+            3:HeuristicModel,
         }
 
 # console 창을 비우는 함수 
@@ -148,7 +149,7 @@ class ConnectFourEnv:
         # 로직을 바꿔서 이젠 이 if문은 실행되지 않을 것임 
         if not self.board[0,col] == 0:
             reward = -1
-            print("this cannot be happened")
+            print("1:this cannot be happened")
         else:
             # piece를 둠 
             for row in range(self.n_row-1,-1,-1):
@@ -173,7 +174,7 @@ class ConnectFourEnv:
             # 해당 elif 문은 작동하지 않음 
             elif self.player != self.win: 
                 reward = -1
-                print("this cannot be happened")
+                print("2:this cannot be happened")
 
         # 모든 행동이 완료되면 player change
         self.change_player()
@@ -368,109 +369,11 @@ class CFAgent:
 # target_update 1~1000
 
 # op_update 0~2000 ( if 0, then opponent always act randomly)
-class ConnectFourDQNAgent:
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.0001, batch_size=256,hidden_size=64, target_update=100, eps=1., memory_len=2000):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.policy_net = nn.Sequential(
-            nn.Linear(state_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, action_size)
-        ).to(self.device)
-
-        # He로 가중치 초기화
-        for layer in self.policy_net:
-            if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
-        
-        self.target_net = copy.deepcopy(self.policy_net)
-        
-        self.target_net.load_state_dict(self.policy_net.state_dict())
-        self.target_net.eval()
-        
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
-        self.memory = deque(maxlen=memory_len)
-        self.gamma = gamma
-        self.state_size = state_size
-        self.action_size = action_size
-        self.target_update = target_update
-        self.steps = 0
-        self.eps = eps
-        self.batch_size = batch_size
-        self.losses = []
-        
-    def select_action(self, state, valid_actions=None, player=1):
-        if valid_actions is None:
-            valid_actions = range(self.action_size)
-
-        if np.random.uniform() < self.eps:
-            
-            return np.random.choice(valid_actions)
-        with torch.no_grad():
-            state_ = torch.FloatTensor(state).to(self.device)
-            q_value = self.policy_net(state_)
-            # print("state:",state)
-            # print("valid_actions:",valid_actions)
-            # print("q_value:",q_value)
-            valid_q_values = q_value.squeeze()[torch.tensor(valid_actions)]
-            return valid_actions[torch.argmax(valid_q_values)]
-        
-    def append_memory(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-    
-    def replay(self):
-        if len(self.memory) < self.batch_size:
-            return
-        minibatch = random.sample(self.memory, self.batch_size)
-
-        
-        state1_batch = torch.cat([s1 for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        action_batch = torch.Tensor([a for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        reward_batch = torch.Tensor([r for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        state2_batch = torch.cat([s2 for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        done_batch = torch.Tensor([d for (s1,a,r,s2,d) in minibatch]).to(self.device)
-        Q1 = self.policy_net(state1_batch) 
-        with torch.no_grad():
-            Q2 = self.target_net(state2_batch) #B
-        
-        Y = reward_batch + self.gamma * ((1-done_batch) * torch.max(Q2,dim=1)[0])
-        X = Q1.gather(dim=1,index=action_batch.long().unsqueeze(dim=1)).squeeze()
-        loss = nn.MSELoss()(X, Y.detach())
-        self.losses.append(loss.detach().cpu().numpy())
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-        # state, action, reward, next_state, done = zip(*minibatch)
-        # print(state)
-        # state = torch.FloatTensor(state) # .to(self.device)
-
-        # action = torch.LongTensor(action).unsqueeze(1)  #  .to(self.device)
-        # reward = torch.FloatTensor(reward).unsqueeze(1)  # .to(self.device)
-        # next_state = torch.FloatTensor(next_state)  # .to(self.device)
-        # done = torch.FloatTensor(done).unsqueeze(1)  # .to(self.device)
-        
-        # current_q_values = self.policy_net(state).gather(1, action)
-        # next_q_values = self.target_net(next_state).detach().max(1)[0].unsqueeze(1)
-        # expected_q_values = reward + self.gamma * next_q_values * (1 - done)
-        
-        # loss = nn.MSELoss()(current_q_values, expected_q_values)
-        # self.optimizer.zero_grad()
-        # loss.backward()
-        # self.optimizer.step()
-        self.steps += 1
-        if self.steps % self.target_update == 0:
-            self.update_target_net()
-        
-    def update_target_net(self):
-        self.target_net.load_state_dict(self.policy_net.state_dict())
-
 
     
 
 class ConnectFourDQNAgent(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.001, batch_size=1024, target_update=2000, eps=1., memory_len=10000,model_num=1):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.0001, batch_size=1024, target_update=10000, eps=1., memory_len=10000,model_num=1):
         super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -517,6 +420,8 @@ class ConnectFourDQNAgent(nn.Module):
             # CNN일 때만 차원을 바꿔줌 
             if self.policy_net.model_type == 'CNN':
                 state_ = state_.unsqueeze(0).unsqueeze(0)  # (6,7) -> (1,1,6,7)
+            else: state_ = state_.flatten()
+
             q_value = self.policy_net(state_)
             # print("state:",state)
             # print("valid_actions:",valid_actions)
@@ -526,8 +431,13 @@ class ConnectFourDQNAgent(nn.Module):
         
     # replay buffer에 경험 추가 
     def append_memory(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-    
+        if self.policy_net.model_type == 'Linear':
+            self.memory.append((state.flatten(), action, reward, next_state.flatten(), done))
+        else: 
+            self.memory.append((state, action, reward, next_state, done))
+            
+
+
     def train(self,epi,env,op_model):
         env.reset()
 
@@ -602,12 +512,12 @@ class ConnectFourDQNAgent(nn.Module):
                     elif turn==2:  # 내 경험만 수집한다
                         self.append_memory(past_state, past_action, past_reward, op_state, past_done)
                         # print for debugging
-                        print("for opponent")
-                        print("state:\n",torch.round(past_state).reshape(6,7).int())
-                        print("action:",past_action)
-                        print("reward:",past_reward)
-                        print("next_state\n",torch.round(op_state).reshape(6,7).int())
-                        print()
+                        # print("for opponent")
+                        # print("state:\n",torch.round(past_state).reshape(6,7).int())
+                        # print("action:",past_action)
+                        # print("reward:",past_reward)
+                        # print("next_state\n",torch.round(op_state).reshape(6,7).int())
+                        # print()
 
                 
                 # op_action = Qmodels[player].select_action(op_state,valid_actions=CFenv.valid_actions, player=player)
@@ -722,8 +632,157 @@ class ConnectFourDQNAgent(nn.Module):
 
 
 
+# 아래 heuristic agent는 (6,7) 보드판에서만 작동함
+# model_num=3: Heuristic Model
+class HeuristicAgent():
+    def __init__(self, model_num=3):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.policy_net = models[model_num]()
+
+    # 이미 normalization이 되어있으므로 1p로 가정해도 무방함
+    def score_window(self, window):
+        score = 0
+        turn = 1
+        op_turn = 2 
+
+        if window.count(turn) == 4:
+            score += 100
+        elif window.count(turn) == 3 and window.count(0) == 1:
+            score += 5
+        elif window.count(turn) == 2 and window.count(0) == 2:
+            score += 2
+
+        if window.count(op_turn) == 3 and window.count(0) == 1:
+            score -= 4
+
+        return score
+
+    def get_board_score(self, board):
+        score = 0
+        # 이미 normalization이 되어있으므로 1p로 가정해도 무방함
+        piece = 1
+
+        # Score center column
+        center_array = [int(i) for i in list(board[:, 3])]
+        center_count = center_array.count(piece)
+        score += center_count * 3
+
+        # Score Horizontal
+        for row in range(6):
+            row_array = [int(i) for i in list(board[row,:])]
+            for c in range(4):
+                window = row_array[c:c+4]
+                score += self.score_window(window)
+
+        # Score Vertical
+        for col in range(7):
+            col_array = [int(i) for i in list(board[:, col])]
+            for c in range(3):
+                window = col_array[c:c+4]
+                score += self.score_window(window)
+
+        # Score posiive sloped diagonal
+        for row in range(3):
+            for col in range(4):
+                window = [board[row+i][col+i] for i in range(4)]
+                score += self.score_window(window)
+
+        # Score negative sloped diagonal
+        for row in range(3, 6):
+            for col in range(4):
+                window = [board[row-i][col+i] for i in range(4)]
+                score += self.score_window(window)
+
+        return score
+
+    def arr2board(self, state):
+        state_ = copy.deepcopy(np.array(state.reshape(6,7)))
+        state_ = np.round(state_).astype(int)
+        state_[state_==-1] = 2
+
+        return state_
 
 
+    # def select_action(self, state, valid_actions=None, player=1):
+    #     if valid_actions is None:
+    #         valid_actions = range(self.action_size)
+
+    #     best_score = -10000
+    #     best_col = np.random.choice(valid_actions)
+    #     board = self.arr2board(state)
+    #     for col in valid_actions:
+    #         temp_board = copy.deepcopy(board)
+    #         if temp_board[5][col] == 0:
+    #             row = next((r for r in range(6) if temp_board[r][col]==0))
+    #             temp_board[row][col] = player
+    #         score = self.get_board_score(temp_board)
+    #         if score > best_score:
+    #             best_score = score
+    #             best_col = col
+
+    #     return best_col
+    
+    def select_action(self, state, valid_actions=None, player=1):
+        if valid_actions is None:
+            valid_actions = range(self.action_size)
+        rows, cols = state.shape
+
+        board = self.arr2board(state)
+
+        # Check horizontally
+        for r in range(rows):
+            for c in range(cols - 3):
+                window = board[r, c:c+4]
+                if np.array_equal(window, [1, 1, 1, 1]):
+                    return c
+                elif np.array_equal(window, [2, 2, 2, 2]):
+                    return c
+
+        # Check vertically
+        for r in range(rows - 3):
+            for c in range(cols):
+                window = board[r:r+4, c]
+                if np.array_equal(window, [1, 1, 1, 1]):
+                    return c
+                elif np.array_equal(window, [2, 2, 2, 2]):
+                    return c
+
+        # Check diagonally (down-right)
+        for r in range(rows - 3):
+            for c in range(cols - 3):
+                window = [board[r+i, c+i] for i in range(4)]
+                if np.array_equal(window, [1, 1, 1, 1]):
+                    return c
+                elif np.array_equal(window, [2, 2, 2, 2]):
+                    return c
+
+        # Check diagonally (up-right)
+        for r in range(3, rows):
+            for c in range(cols - 3):
+                window = [board[r-i, c+i] for i in range(4)]
+                if np.array_equal(window, [1, 1, 1, 1]):
+                    return c
+                elif np.array_equal(window, [2, 2, 2, 2]):
+                    return c
+
+        # Evaluate the number of consecutive tiles for each player in valid windows
+        scores = np.zeros(cols)
+        for c in valid_actions:
+            for r in range(rows - 3):
+                window = board[r:r+4, c]
+                p1_count = np.sum(window == 1)
+                p2_count = np.sum(window == 2)
+                scores[c] += p1_count**2 - p2_count**2
+
+        # Find the column with the maximum score among the valid actions
+        max_score = np.max(scores)
+        best_columns = [col for col in valid_actions if scores[col] == max_score]
+
+        # If multiple columns have the same score, choose randomly among them
+        if best_columns: selected_column = np.random.choice(best_columns)
+        else: selected_column = np.random.choice(valid_actions)
+
+        return selected_column
 
 
     

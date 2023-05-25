@@ -94,3 +94,9 @@ class CFCNN(nn.Module):
     #     y = self.linear2(y) # size N, 12
     #     # (N, 12)
     #     return y.cuda()
+
+# heuristic model을 이용하기 위한 껍데기
+# action을 선택할 때 2차원 배열을 그대로 이용하므로 'cnn'으로 둠
+class HeuristicModel():
+    def __init__(self):
+        self.model_type = 'CNN'
