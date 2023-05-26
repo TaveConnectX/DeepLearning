@@ -374,7 +374,7 @@ class CFAgent:
     
 
 class ConnectFourDQNAgent(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.0001, batch_size=1024, target_update=10000, eps=1., memory_len=10000,model_num=1):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.001, batch_size=1024, target_update=10000, eps=1., memory_len=10000,model_num=1):
         super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         

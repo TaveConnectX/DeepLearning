@@ -1,6 +1,9 @@
+import torch
 from torch import nn
 import torch.nn.init as init
 import torch.nn.functional as F
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # class 가독성을 놎이기 위해 network 부분만 따로 분리
 class CFLinear(nn.Module):
@@ -16,13 +19,13 @@ class CFLinear(nn.Module):
         for layer in self.layers:
             if type(layer) in [nn.Conv2d, nn.Linear]:
                 init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
-            layer.cuda()
+            layer = layer.to(device)
         
     def forward(self, x):
         y = F.relu(self.linear1(x))
         y = F.relu(self.linear2(y))
         y = self.linear3(y)
-        return y.cuda()
+        return y
 
 # class 가독성을 높이기 위해 network 부분만 따로 분리 
 class CFCNN(nn.Module):
@@ -57,7 +60,7 @@ class CFCNN(nn.Module):
         for layer in self.layers:
             if type(layer) in [nn.Conv2d, nn.Linear]:
                 init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
-            layer.cuda()
+            layer = layer.to(device)
 
 
     def forward(self, x):
@@ -70,7 +73,7 @@ class CFCNN(nn.Module):
         y = y.flatten(start_dim=1)
         y = F.relu(self.linear1(y))
         y = self.linear2(y)
-        return y.cuda()
+        return y
 
     # def forward(self,x):
     #     # (N, 1, 6,7)
