@@ -149,6 +149,7 @@ class ConnectFourEnv:
         # 로직을 바꿔서 이젠 이 if문은 실행되지 않을 것임 
         if not self.board[0,col] == 0:
             reward = -1
+            # print(self.board, action)
             print("1:this cannot be happened")
         else:
             # piece를 둠 
@@ -634,155 +635,101 @@ class ConnectFourDQNAgent(nn.Module):
 
 # 아래 heuristic agent는 (6,7) 보드판에서만 작동함
 # model_num=3: Heuristic Model
+# 랜덤으로 두다가 다음 step에 지거나 이길 수 있다면 행동함 
 class HeuristicAgent():
     def __init__(self, model_num=3):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.policy_net = models[model_num]()
 
-    # 이미 normalization이 되어있으므로 1p로 가정해도 무방함
-    def score_window(self, window):
-        score = 0
-        turn = 1
-        op_turn = 2 
 
-        if window.count(turn) == 4:
-            score += 100
-        elif window.count(turn) == 3 and window.count(0) == 1:
-            score += 5
-        elif window.count(turn) == 2 and window.count(0) == 2:
-            score += 2
-
-        if window.count(op_turn) == 3 and window.count(0) == 1:
-            score -= 4
-
-        return score
-
-    def get_board_score(self, board):
-        score = 0
-        # 이미 normalization이 되어있으므로 1p로 가정해도 무방함
-        piece = 1
-
-        # Score center column
-        center_array = [int(i) for i in list(board[:, 3])]
-        center_count = center_array.count(piece)
-        score += center_count * 3
-
-        # Score Horizontal
-        for row in range(6):
-            row_array = [int(i) for i in list(board[row,:])]
-            for c in range(4):
-                window = row_array[c:c+4]
-                score += self.score_window(window)
-
-        # Score Vertical
-        for col in range(7):
-            col_array = [int(i) for i in list(board[:, col])]
-            for c in range(3):
-                window = col_array[c:c+4]
-                score += self.score_window(window)
-
-        # Score posiive sloped diagonal
-        for row in range(3):
-            for col in range(4):
-                window = [board[row+i][col+i] for i in range(4)]
-                score += self.score_window(window)
-
-        # Score negative sloped diagonal
-        for row in range(3, 6):
-            for col in range(4):
-                window = [board[row-i][col+i] for i in range(4)]
-                score += self.score_window(window)
-
-        return score
-
+    # normalize 된 board를 다시 1과 2로 바꿔줌
     def arr2board(self, state):
         state_ = copy.deepcopy(np.array(state.reshape(6,7)))
         state_ = np.round(state_).astype(int)
         state_[state_==-1] = 2
 
         return state_
-
-
-    # def select_action(self, state, valid_actions=None, player=1):
-    #     if valid_actions is None:
-    #         valid_actions = range(self.action_size)
-
-    #     best_score = -10000
-    #     best_col = np.random.choice(valid_actions)
-    #     board = self.arr2board(state)
-    #     for col in valid_actions:
-    #         temp_board = copy.deepcopy(board)
-    #         if temp_board[5][col] == 0:
-    #             row = next((r for r in range(6) if temp_board[r][col]==0))
-    #             temp_board[row][col] = player
-    #         score = self.get_board_score(temp_board)
-    #         if score > best_score:
-    #             best_score = score
-    #             best_col = col
-
-    #     return best_col
     
+    def put_piece(self, board, col, player):
+        next_board = copy.deepcopy(board)
+        for r in range(5, -1, -1):
+            if next_board[r][col] == 0:
+                next_board[r][col] = player
+                break
+        return next_board
+
     def select_action(self, state, valid_actions=None, player=1):
         if valid_actions is None:
             valid_actions = range(self.action_size)
         rows, cols = state.shape
 
         board = self.arr2board(state)
+        # print(state, board)
+        for col in valid_actions:
 
-        # Check horizontally
-        for r in range(rows):
-            for c in range(cols - 3):
-                window = board[r, c:c+4]
-                if np.array_equal(window, [1, 1, 1, 1]):
-                    return c
-                elif np.array_equal(window, [2, 2, 2, 2]):
-                    return c
+            new_board = self.put_piece(board, col, 1)
 
-        # Check vertically
-        for r in range(rows - 3):
-            for c in range(cols):
-                window = board[r:r+4, c]
-                if np.array_equal(window, [1, 1, 1, 1]):
-                    return c
-                elif np.array_equal(window, [2, 2, 2, 2]):
-                    return c
+            # Check horizontally
+            for r in range(rows):
+                for c in range(cols - 3):
+                    window = new_board[r, c:c+4]
+                    if np.array_equal(window, [1, 1, 1, 1]):
+                        return col
 
-        # Check diagonally (down-right)
-        for r in range(rows - 3):
-            for c in range(cols - 3):
-                window = [board[r+i, c+i] for i in range(4)]
-                if np.array_equal(window, [1, 1, 1, 1]):
-                    return c
-                elif np.array_equal(window, [2, 2, 2, 2]):
-                    return c
-
-        # Check diagonally (up-right)
-        for r in range(3, rows):
-            for c in range(cols - 3):
-                window = [board[r-i, c+i] for i in range(4)]
-                if np.array_equal(window, [1, 1, 1, 1]):
-                    return c
-                elif np.array_equal(window, [2, 2, 2, 2]):
-                    return c
-
-        # Evaluate the number of consecutive tiles for each player in valid windows
-        scores = np.zeros(cols)
-        for c in valid_actions:
+            # Check vertically
             for r in range(rows - 3):
-                window = board[r:r+4, c]
-                p1_count = np.sum(window == 1)
-                p2_count = np.sum(window == 2)
-                scores[c] += p1_count**2 - p2_count**2
+                for c in range(cols):
+                    window = new_board[r:r+4, c]
+                    if np.array_equal(window, [1, 1, 1, 1]):
+                        return col
+                    
+            # Check diagonally (down-right)
+            for r in range(rows - 3):
+                for c in range(cols - 3):
+                    window = [new_board[r+i, c+i] for i in range(4)]
+                    if np.array_equal(window, [1, 1, 1, 1]):
+                        return col
 
-        # Find the column with the maximum score among the valid actions
-        max_score = np.max(scores)
-        best_columns = [col for col in valid_actions if scores[col] == max_score]
+            # Check diagonally (up-right)
+            for r in range(3, rows):
+                for c in range(cols - 3):
+                    window = [new_board[r-i, c+i] for i in range(4)]
+                    if np.array_equal(window, [1, 1, 1, 1]):
+                        return col
+                    
+        for col in valid_actions:
 
-        # If multiple columns have the same score, choose randomly among them
-        if best_columns: selected_column = np.random.choice(best_columns)
-        else: selected_column = np.random.choice(valid_actions)
+            new_board = self.put_piece(board, col, 2)
 
-        return selected_column
+            # Check horizontally
+            for r in range(rows):
+                for c in range(cols - 3):
+                    window = new_board[r, c:c+4]
+                    if np.array_equal(window, [2,2,2,2]):
+                        return col
+
+            # Check vertically
+            for r in range(rows - 3):
+                for c in range(cols):
+                    window = new_board[r:r+4, c]
+                    if np.array_equal(window, [2,2,2,2]):
+                        return col
+                    
+            # Check diagonally (down-right)
+            for r in range(rows - 3):
+                for c in range(cols - 3):
+                    window = [new_board[r+i, c+i] for i in range(4)]
+                    if np.array_equal(window, [2,2,2,2]):
+                        return col
+
+            # Check diagonally (up-right)
+            for r in range(3, rows):
+                for c in range(cols - 3):
+                    window = [new_board[r-i, c+i] for i in range(4)]
+                    if np.array_equal(window, [2,2,2,2]):
+                        return col
+
+        return np.random.choice(valid_actions)
 
 
     
