@@ -12,7 +12,7 @@ epi = 5000
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
-Qagent = env.ConnectFourDQNAgent(model_num=2)  #학습시킬 agent
+Qagent = env.ConnectFourDQNAgent(model_num=1)  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
 Qagent2 = env.HeuristicAgent()  # 상대 agent
 

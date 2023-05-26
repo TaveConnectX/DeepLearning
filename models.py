@@ -64,13 +64,13 @@ class CFCNN(nn.Module):
 
 
     def forward(self, x):
-        y = F.relu(self.conv1(x))
-        y = self.maxpool1(y)
-        y = y.flatten(start_dim=2)
+        y = F.relu(self.conv1(x))  # (N, 42, 6, 7)
+        y = self.maxpool1(y)  # (N, 42, 3, 4)
+        y = y.flatten(start_dim=2)  # (N, 42, 12)
         # view로 채널 차원을 마지막으로 빼줌
         # 정확한 이유는 나중에 알아봐야 할듯? 
-        y = y.view(y.shape[0], -1, 42)
-        y = y.flatten(start_dim=1)
+        y = y.view(y.shape[0], -1, 42)  # (N, 12, 42)
+        y = y.flatten(start_dim=1)  # (N, 12*42)
         y = F.relu(self.linear1(y))
         y = self.linear2(y)
         return y

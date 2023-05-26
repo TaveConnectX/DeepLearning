@@ -420,6 +420,7 @@ class ConnectFourDQNAgent(nn.Module):
             state_ = torch.FloatTensor(state).to(self.device)
             # CNN일 때만 차원을 바꿔줌 
             if self.policy_net.model_type == 'CNN':
+                state_ = state_.reshape(6,7)
                 state_ = state_.unsqueeze(0).unsqueeze(0)  # (6,7) -> (1,1,6,7)
             else: state_ = state_.flatten()
 
@@ -435,7 +436,7 @@ class ConnectFourDQNAgent(nn.Module):
         if self.policy_net.model_type == 'Linear':
             self.memory.append((state.flatten(), action, reward, next_state.flatten(), done))
         else: 
-            self.memory.append((state, action, reward, next_state, done))
+            self.memory.append((state.reshape(6,7), action, reward, next_state.reshape(6,7), done))
             
 
 
@@ -472,7 +473,7 @@ class ConnectFourDQNAgent(nn.Module):
                 # 원래는 player, op_player 였지만, 직관적인 이해를 위해 수정 
                 turn = env.player
                 op_turn = 2//turn
-
+                
                 action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
 
                 observation, reward, done = env.step(action)
@@ -661,6 +662,7 @@ class HeuristicAgent():
     def select_action(self, state, valid_actions=None, player=1):
         if valid_actions is None:
             valid_actions = range(self.action_size)
+        if state.ndim == 1: state = state.reshape(6,7)
         rows, cols = state.shape
 
         board = self.arr2board(state)
