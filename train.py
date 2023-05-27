@@ -14,7 +14,7 @@ epi = 5000
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
 Qagent = env.ConnectFourDQNAgent(model_num=1)  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
-Qagent2 = env.HeuristicAgent()  # 상대 agent
+Qagent2 = env.ConnectFourRandomAgent()  # 상대 agent
 
 # DQNAgent class 에 내장
 # losses = []  # loss 값 plot을 위한 list
@@ -94,11 +94,8 @@ def load_model(model, filename='DQNmodel'):
 #     model1.eps, model2.eps = eps1, eps2  # restore exploration
 
 #     return records
-
-
         
 Qagent.train(epi=epi, env=CFenv, op_model=Qagent2)
-
 
 plt.plot(Qagent.losses)
 plt.show()

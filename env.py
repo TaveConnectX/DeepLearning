@@ -734,7 +734,56 @@ class HeuristicAgent():
         return np.random.choice(valid_actions)
 
 
+
+### m0nd2y
+class ConnectFourRandomAgent(nn.Module) :
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.003, batch_size=1024, target_update=1000, eps=1., memory_len=10000):
+        super(ConnectFourRandomAgent,self).__init__()
+        # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.policy_net = CFCNN()
+        # self.target_net = copy.deepcopy(self.policy_net)
+        # self.target_net.load_state_dict(self.policy_net.state_dict())
+        # self.target_net.eval()
+        # self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
+        self.memory = deque(maxlen=memory_len)
+        # self.gamma = gamma  
+        # self.state_size = state_size
+        # self.action_size = action_size
+        # self.target_update = target_update 
+        # self.steps = 0
+        self.eps = eps 
+        self.batch_size = batch_size 
+        # self.losses = [] 
+
+    def select_action(self, state, valid_actions=None, player=1):
+        return np.random.choice(valid_actions)
+        
+    def append_memory(self, state, action, reward, next_state, done):
+        pass
+        #self.memory.append((state, action, reward, next_state, done))
     
+    def replay(self):
+        if len(self.memory) < self.batch_size*2:
+            return
+        # minibatch = random.sample(self.memory, self.batch_size)
 
+        # state1_batch = torch.stack([s1 for (s1,a,r,s2,d) in minibatch]).unsqueeze(1).to(self.device)
+        # action_batch = torch.Tensor([a for (s1,a,r,s2,d) in minibatch]).to(self.device)
+        # reward_batch = torch.Tensor([r for (s1,a,r,s2,d) in minibatch]).to(self.device)
+        # state2_batch = torch.stack([s2 for (s1,a,r,s2,d) in minibatch]).unsqueeze(1).to(self.device)
+        # done_batch = torch.Tensor([d for (s1,a,r,s2,d) in minibatch]).to(self.device)
+        # Q1 = self.policy_net(state1_batch)
+        # with torch.no_grad():
+        #     Q2 = self.target_net(state2_batch)
+        # Y = reward_batch + self.gamma * ((1-done_batch) * torch.max(Q2,dim=1)[0])
+        # X = Q1.gather(dim=1,index=action_batch.long().unsqueeze(dim=1)).squeeze()
+        # loss = nn.MSELoss()(X, Y.detach())
+        # self.losses.append(loss.detach().cpu().numpy())
+        # self.optimizer.zero_grad()
+        # loss.backward()
+        # self.optimizer.step()
+        # self.steps += 1
 
-
+    def update_target_net(self):
+        pass
+        #self.target_net.load_state_dict(self.policy_net.state_dict())
