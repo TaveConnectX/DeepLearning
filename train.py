@@ -8,7 +8,7 @@ import time
 import matplotlib.pyplot as plt
 import os
 
-epi = 5000
+epi = 1000
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
@@ -49,14 +49,15 @@ Qagent2 = env.ConnectFourRandomAgent()  # 상대 agent
 
 # 모델을 pth 파일로 저장
 def save_model(model, filename='DQNmodel'):
-    model_path = 'model/'+filename+'.pth'
+    model_path = 'model/'+filename+'_'+model.model_type+'.pth'
     if os.path.isfile(model_path):
         overwrite = input('Overwrite existing model? (Y/n): ')
         if overwrite == 'n':
             new_name = input('Enter name of new model:')
             model_path = 'model/'+new_name+'.pth'
     
-    torch.save(model.state_dict(), 'model/'+filename+'.pth')
+    
+    torch.save(model.state_dict(), model_path)
 
 # 모델 load. 매개변수만 load 하는게 overload가 적다고 하여 이 방법을 선택하였음 
 def load_model(model, filename='DQNmodel'):
@@ -94,8 +95,11 @@ def load_model(model, filename='DQNmodel'):
 #     model1.eps, model2.eps = eps1, eps2  # restore exploration
 
 #     return records
+
+
         
 Qagent.train(epi=epi, env=CFenv, op_model=Qagent2)
+
 
 plt.plot(Qagent.losses)
 plt.show()
@@ -103,11 +107,11 @@ plt.show()
 
 record = env.compare_model(Qagent, Qagent2, n_battle=100)
 print(record)
-if record[0] >= record[1]:
-    print("Q1의 승률이 {}, Q1을 선택하겠습니다".format(record[0]/sum(record)))
-else:
-    print("Q2의 승률이 {}, Q2를 선택하겠습니다".format(record[1]/sum(record)))
-    Qagent = Qagent2
+# if record[0] >= record[1]:
+#     print("Q1의 승률이 {}, Q1을 선택하겠습니다".format(record[0]/sum(record)))
+# else:
+#     print("Q2의 승률이 {}, Q2를 선택하겠습니다".format(record[1]/sum(record)))
+#     Qagent = Qagent2
 
 # for testing
 mode = input("put 1 for test:\n")
