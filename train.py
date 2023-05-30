@@ -64,37 +64,6 @@ def load_model(model, filename='DQNmodel'):
     model.load_state_dict(torch.load('model/'+filename+'.pth'))
 
 
-# env.py 로 이동 
-# # 두 모델의 승률을 비교하는 함수
-# # n_battle 만큼 서로의 policy로 대결하여 
-# # [model1's win, model2's win, draw] 리스트를 리턴 
-# def compare_model(model1, model2, n_battle=10):
-#     # epsilon을 복원하지 않으면, 학습 내내 고정됨 
-#     eps1, eps2 = model1.eps, model2.eps
-#     # 현재 model2를 random policy로 둘 예정이므로, eps=1을 사용
-#     model1.eps, model2.eps = 0, 1.  # no exploration
-#     models = [model1, model2]
-#     records = [0,0,0]  # model1 win, model2 win, draw
-#     comp_env = env.ConnectFourEnv()
-
-#     for round in range(n_battle):
-#         comp_env.reset()
-
-#         while not comp_env.done:
-#             # 성능 평가이므로, noise를 주지 않음 
-#             state_ = board_normalization(noise=False,env=comp_env, flatten=flatten)
-#             state = torch.from_numpy(state_).float()
-#             player = comp_env.player
-#             action = models[player-1].select_action(state, valid_actions=comp_env.valid_actions, player=player)
-#             comp_env.step(action)
-        
-#         if comp_env.win == 1: records[0] += 1
-#         elif comp_env.win == 2: records[1] += 1
-#         else: records[2] += 1
-
-#     model1.eps, model2.eps = eps1, eps2  # restore exploration
-
-#     return records
 
 
         

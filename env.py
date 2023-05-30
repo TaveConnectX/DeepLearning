@@ -374,7 +374,7 @@ class CFAgent:
     
 
 class ConnectFourDQNAgent(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.001, batch_size=1024, target_update=10000, eps=1., memory_len=10000,model_num=1):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.001, batch_size=1024, target_update=10000, eps=1., memory_len=10000,repeat_reward=1,model_num=1):
         super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -400,6 +400,7 @@ class ConnectFourDQNAgent(nn.Module):
         self.steps = 0
         self.eps = eps  # DQN에서 사용될 epsilon
         self.batch_size = batch_size  # size of mini-batch
+        self.repeat_reward = repeat_reward
         self.losses = []  # loss들을 담는 list 
 
     # def forward(self, x):
@@ -485,7 +486,7 @@ class ConnectFourDQNAgent(nn.Module):
                     if done:
                         repeat = 1
                         # 중요한 경험일 때는 더 많이 memory에 추가해준다(optional)
-                        if reward > 0: repeat = 5
+                        if reward > 0: repeat = self.repeat_reward
                         for j in range(repeat):
                             # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
                             if turn==1:
@@ -553,6 +554,7 @@ class ConnectFourDQNAgent(nn.Module):
                 # 게임이 끝났다면 나가기 
                 if done: break
             # print("eps:",Qagent.eps)
+            
             # epsilon-greedy
             # min epsilon을 가지기 전까지 episode마다 조금씩 낮춰준다(1 -> 0.1)
             if self.eps > 0.1: self.eps -= (1/epi)
