@@ -12,11 +12,11 @@ import os
 import json
 import pandas as pd
 
-epi = 200  # 한 번 학습에 사용할 episode 수 
+epi = 2000  # 한 번 학습에 사용할 episode 수 
 CFenv = env.ConnectFourEnv()  # connect4 환경 생성
-opAgent = env.HeuristicAgent()  # 상대 agent
 model_num = 2  # 사용할 내 모델 넘버 
-optimization_trial = 10  # sampling 시도 횟수
+opAgent = env.HeuristicAgent()  # 상대 agent
+optimization_trial = 100  # sampling 시도 횟수
 
 
 def dict2json(data, filename='parameter sampling.json'):

@@ -16,6 +16,7 @@ models = {
             1:CFLinear,
             2:CFCNN,
             3:HeuristicModel,
+            4:RandomModel,
         }
 
 # console 창을 비우는 함수 
@@ -374,7 +375,7 @@ class CFAgent:
     
 
 class ConnectFourDQNAgent(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.001, batch_size=1024, target_update=10000, eps=1., memory_len=10000,repeat_reward=1,model_num=1):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.0001, batch_size=64, target_update=20, eps=1., memory_len=6400,repeat_reward=2,model_num=1):
         super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -388,11 +389,13 @@ class ConnectFourDQNAgent(nn.Module):
         self.target_net.eval()
 
 
+        self.lr = lr
         # optimizer는 기본적으로 adam을 사용하겠지만 추후 다른 것으로 실험할 수도 있음
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
         
+        self.memory_len = memory_len
         # DQN에 사용될 replay memory(buffer)
-        self.memory = deque(maxlen=memory_len)
+        self.memory = deque(maxlen=self.memory_len)
         self.gamma = gamma  # discount factor
         self.state_size = state_size
         self.action_size = action_size
@@ -739,10 +742,14 @@ class HeuristicAgent():
 
 ### m0nd2y
 class ConnectFourRandomAgent(nn.Module) :
-    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.003, batch_size=1024, target_update=1000, eps=1., memory_len=10000):
+    def __init__(self, state_size=6*7, action_size=7, gamma=0.99, lr=0.003, batch_size=1024, target_update=1000, eps=1., memory_len=10000, model_num=4):
         super(ConnectFourRandomAgent,self).__init__()
         # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.policy_net = CFCNN()
+        
+        ### Sangyeon
+        # 모델의 type과 name을 지정해주기 위해 수정
+        self.policy_net = models[model_num]()
+        
         # self.target_net = copy.deepcopy(self.policy_net)
         # self.target_net.load_state_dict(self.policy_net.state_dict())
         # self.target_net.eval()

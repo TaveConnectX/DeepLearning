@@ -10,6 +10,7 @@ class CFLinear(nn.Module):
     def __init__(self, state_size=6*7, action_size=7, hidden_size=64):
         super(CFLinear,self).__init__()
         self.model_type = 'Linear'
+        self.model_name = 'Linear-v1'
         
         self.linear1 = nn.Linear(state_size, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
@@ -32,6 +33,7 @@ class CFCNN(nn.Module):
     def __init__(self, action_size=7):
         super(CFCNN,self).__init__()
         self.model_type = 'CNN'
+        self.model_name = 'CNN-v1'
         # self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(2,2), stride=1,padding=1)
         # self.conv2 = nn.Conv2d(32,64,(2,2), stride=1, padding=1)
         # self.conv3 = nn.Conv2d(64,64,(2,2), stride=1, padding=1)
@@ -103,3 +105,11 @@ class CFCNN(nn.Module):
 class HeuristicModel():
     def __init__(self):
         self.model_type = 'CNN'
+        self.model_name = 'Heuristic-v1'
+
+# random model을 이용하기 위한 껍데기
+# action을 선택할 때 2차원 배열을 그대로 이용하므로 'cnn'으로 둠
+class RandomModel():
+    def __init__(self):
+        self.model_type = 'CNN'
+        self.model_name = 'Random'

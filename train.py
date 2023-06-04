@@ -1,5 +1,6 @@
 import env
 import copy
+import json
 import numpy as np
 import torch
 import random
@@ -8,53 +9,31 @@ import time
 import matplotlib.pyplot as plt
 import os
 
-epi = 1000
+epi = 10000
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
-Qagent = env.ConnectFourDQNAgent(model_num=1)  #학습시킬 agent
+Qagent = env.ConnectFourDQNAgent(
+    lr=0.004315892712310481,
+    batch_size=21,
+    target_update=54,
+    memory_len=10395,
+    repeat_reward=1,
+    model_num=2
+)  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
 Qagent2 = env.ConnectFourRandomAgent()  # 상대 agent
 
-# DQNAgent class 에 내장
-# losses = []  # loss 값 plot을 위한 list
-
-# 구조 변경에 따른 삭제 예정
-# noise = False  # board를 normalize 할 때 noise 추가 여부.
-# flatten = False  # cnn일 땐 False, linear일 땐 true
-
-# train() 을 env.py에 추가함에 따라 필요 없어짐 
-# target_update = 500  # target net을 update 하는 주기(단위: episode)
-
-# env.py 로 이동
-# # env의 board를 normalize 해주는 함수 
-# # 2를 -1로 바꿔서 board를 -1~1로 바꿔줌
-# def board_normalization(noise,env=CFenv, flatten=True):
-#     # cnn을 사용하지 않는다면, 2차원 board를 1차원으로 바꿔줘야됨 
-#     if flatten:
-#         arr = copy.deepcopy(env.board.flatten())
-#     else: arr = copy.deepcopy(env.board)
-
-
-#     """Replace all occurrences of 2 with -1 in a numpy array"""
-#     arr[arr == 2] = -1
-    
-#     # 2p이면 보드판을 반전시켜서 보이게 하여, 항상 같은 색깔을 보면서 학습 가능
-#     if env.player == 2: arr = -1 * arr
-
-#     if noise:
-#         arr += np.random.randn(*arr.shape)/100.0
-
-#     return arr
 
 # 모델을 pth 파일로 저장
 def save_model(model, filename='DQNmodel'):
-    model_path = 'model/'+filename+'_'+model.model_type+'.pth'
+    global num
+    model_path = 'model/model_{}/'.format(num)+filename+'{}_'.format(num)+model.model_name+'.pth'
     if os.path.isfile(model_path):
         overwrite = input('Overwrite existing model? (Y/n): ')
         if overwrite == 'n':
             new_name = input('Enter name of new model:')
-            model_path = 'model/'+new_name+'.pth'
+            model_path = 'model/model_{}/'.format(num)+new_name+'_'+model.model_name+'.pth'
     
     
     torch.save(model.state_dict(), model_path)
@@ -70,17 +49,45 @@ def load_model(model, filename='DQNmodel'):
 Qagent.train(epi=epi, env=CFenv, op_model=Qagent2)
 
 
-plt.plot(Qagent.losses)
-plt.show()
 
 
 record = env.compare_model(Qagent, Qagent2, n_battle=100)
 print(record)
-# if record[0] >= record[1]:
-#     print("Q1의 승률이 {}, Q1을 선택하겠습니다".format(record[0]/sum(record)))
-# else:
-#     print("Q2의 승률이 {}, Q2를 선택하겠습니다".format(record[1]/sum(record)))
-#     Qagent = Qagent2
+print("win rate of Qagent: {}%".format(record[0]))
+
+
+
+model_config = {
+    'model_type': Qagent.policy_net.model_name,
+    'op_model_type': Qagent2.policy_net.model_name,
+    'epi': epi,
+    'gamma': Qagent.gamma,
+    'learning rate': Qagent.lr,
+    'batch_size': Qagent.batch_size,
+    'target_update': Qagent.target_update,
+    'memory_len': Qagent.memory_len,
+    'repeat_reward': Qagent.repeat_reward,
+    'win_rate': record[0]/sum(record),
+}
+
+num = 1
+while True:
+    folder_path = "model/model_{}".format(num)
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        print(folder_path+" 에 폴더를 만들었습니다.")
+        break
+    else: num += 1
+
+with open('model/model_{}/model_config_{}.json'.format(num,num), 'w') as f:
+    json.dump(model_config, f, indent=4, ensure_ascii=False)
+
+
+plt.plot(Qagent.losses)
+plt.savefig('model/model_{}/loss_{}.png'.format(num,num))
+plt.show()
+
+save_model(Qagent.policy_net)
 
 # for testing
 mode = input("put 1 for test:\n")
@@ -122,7 +129,8 @@ if mode == '1':
     else: print("player {} win!".format(int(CFenv.win)))
 
 
-save = input("save model? (Y/n): ")
-if save != 'n':
-    save_model(Qagent.policy_net)
+# 폴더별로 관리하게 바꿈으로써 밑의 코드는 필요 없어짐 
+# save = input("save model? (Y/n): ")
+# if save != 'n':
+#     save_model(Qagent.policy_net)
 
