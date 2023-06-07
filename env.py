@@ -2,6 +2,7 @@ import numpy as np
 import os
 import random
 import copy
+import math
 from collections import deque
 import torch
 from torch import nn, optim
@@ -319,6 +320,13 @@ class ConnectFourEnv:
             self.done = True
 
         
+    def get_next_state(self, state, player, column):
+        next_board = copy.deepcopy(state)
+        for r in range(5, -1, -1):
+            if next_board[r][column] == 0:
+                next_board[r][column] = player
+                break
+        return next_board
 
 
     def step_human(self, col):
@@ -330,36 +338,6 @@ class ConnectFourEnv:
         self.step(np.random.choice(range(self.n_col)))
         self.print_board()
 
-# this class is for Q-learning, but I don't use it
-class CFAgent:
-    def __init__(self, env, lr=0.1, gamma=0.9, epsilon=0.1, policy='q-learning'):
-        self.env = env
-        self.n_states = np.prod(env.board.shape)
-        self.n_actions = env.n_col
-        self.q_table = np.zeros((self.n_states, self.n_actions))
-        self.lr = lr
-        self.gamma = gamma
-        self.epsilon = epsilon
-        self.policy = policy
-    
-    def get_action(self, state):
-        if self.policy == 'random':
-            action = random.randint(0, self.n_actions-1)
-
-        elif self.policy == 'q-learning':
-            # 엡실론-그리디 정책에 따라 행동을 선택
-            if random.uniform(0, 1) < self.epsilon:
-                action = random.randint(0, self.n_actions - 1)
-            else:
-                action = np.argmax(self.q_table[state])
-
-        return action
-    
-    
-    def update(self, state, action, reward, next_state):
-        # Q 테이블을 업데이트
-        td_error = reward + self.gamma * np.max(self.q_table[next_state]) - self.q_table[state][action]
-        self.q_table[state][action] += self.lr * td_error
 
 
 # editable hyperparameters
@@ -796,3 +774,117 @@ class ConnectFourRandomAgent(nn.Module) :
     def update_target_net(self):
         pass
         #self.target_net.load_state_dict(self.policy_net.state_dict())
+
+
+class Node:
+    def __init__(self, state, prior_prob, turn):
+        self.state = state
+        self.turn = turn
+
+        self.visit_count = 0
+        self.value_sum = 0
+        self.prior_prob = prior_prob
+
+        
+        # (action, child) 가 담겨있는 dict
+        self.children = {}
+
+    def get_value(self):
+        if self.visit_count == 0:
+            return 0
+        return self.value_sum / self.visit_count
+
+    def select_action(self, temp):
+        # 현 node 에서 어떤 action을 취했을때 발생하는 child에 대한 visit_count 모음음
+        visit_counts = np.array([
+            child.visit_count for child in self.children.values()
+            ])
+        
+        actions = np.array([
+            action for action in self.children.keys()
+            ])
+
+        if temp == 0: action = actions[np.argmax(visit_counts)]
+        elif temp == np.inf: action = np.random.choice(actions)
+        else:
+            # visit count distribution을 temperature을 이용해서 계산 
+            vc_dist = visit_counts ** (1 / temp)
+            # 다시 다 더하면 1로 정규화(확률이므로)
+            vc_dist = vc_dist / vc_dist.sum()
+            # 새로 만든 distribution을 이용해서 action sampling
+            action = np.random.choice(actions, p=vc_dist)
+
+        return action
+
+    def select_child(self):
+        best_ucb = -np.inf
+        best_action = -1
+        best_child = None
+
+        for action, child in self.children.items():
+            ucb = child.get_ucb(self, child)
+            if ucb > best_ucb:
+                best_ucb = ucb
+                best_action = action
+                best_child = child
+
+        return best_ucb, best_child
+    
+    def get_ucb(self, child, c_puct=2):
+        prior = child.prior_prob * math.sqrt(self.visit_count) / (child.visit_count + 1)
+        # child 와 node는 적대적 관계이므로 음수를 곱해줌
+        value = - child.get_value()
+
+        ucb = value + c_puct * prior
+
+        return ucb
+    
+    def is_expended(self):
+        if self.children: return True
+        else: return False
+
+
+    def expand(self,turn, action_probs):
+        self.turn = turn
+        for a, prob in enumerate(action_probs):
+            if prob != 0: 
+                self.children[a] = Node(prior_prob=prob, turn=2//turn)
+
+
+class MCTS:
+    def __init__(self, env, model, num_simulations):
+        self.env = env
+        self.model = model
+        self.num_simulations = num_simulations
+
+    def get_one_hot_actions(self, actions):
+        one_hot_actions = [0]*7
+        for action in actions:
+            one_hot_actions[action] = 1
+        return one_hot_actions
+    
+    def run(self, state, turn):
+        root = Node(state=state, prior=0, turn=turn)
+
+        action_probs, value = self.model.predict(state)
+        valid_actions = self.get_one_hot_actions(self.env.valid_actions())
+        action_probs = action_probs * valid_actions
+        action_probs /= np.sum(action_probs)
+
+        root.expand(turn=turn, action_probs=action_probs)
+
+        for _ in range(self.num_simulations):
+            node = root
+            search_path = [node]
+
+            while node.is_expended():
+                action, node = node.select_child()
+                search_path.append(node)
+
+            parent = search_path[-2]
+            state = parent.state
+            next_state = self.env.get_next_state(state, player=1, action=action)
+            
+            next_state = board_normalization(noise=False, env=self.env, model_type="CNN")
+            
+
