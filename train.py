@@ -1,4 +1,5 @@
 import env
+import AlphaZeroenv
 import copy
 import json
 import numpy as np
@@ -9,20 +10,23 @@ import time
 import matplotlib.pyplot as plt
 import os
 
-epi = 10000
+epi = 10
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
-CFenv = env.ConnectFourEnv()  # connext4 환경 생성
-Qagent = env.ConnectFourDQNAgent(
-    lr=0.004315892712310481,
-    batch_size=21,
-    target_update=54,
-    memory_len=10395,
-    repeat_reward=1,
-    model_num=2
-)  #학습시킬 agent
+CFenv = AlphaZeroenv.CFEnvforAlphaZero()  # connext4 환경 생성
+agent = env.AlphaZeroAgent(env=CFenv)
+
+agent.train(epochs=100)
+# Qagent = env.ConnectFourDQNAgent(
+#     lr=0.004315892712310481,
+#     batch_size=21,
+#     target_update=54,
+#     memory_len=10395,
+#     repeat_reward=1,
+#     model_num=2
+# )  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
-Qagent2 = env.ConnectFourRandomAgent()  # 상대 agent
+# Qagent2 = env.ConnectFourRandomAgent()  # 상대 agent
 
 
 # 모델을 pth 파일로 저장

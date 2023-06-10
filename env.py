@@ -11,6 +11,7 @@ import time
 # import torch.nn.init as init
 # import torch.nn.functional as F
 from models import *
+from AlphaZeroenv import MCTS, CFEnvforAlphaZero
 
 
 models = {
@@ -18,6 +19,7 @@ models = {
             2:CFCNN,
             3:HeuristicModel,
             4:RandomModel,
+            5:AlphaZeroResNet,
         }
 
 # console 창을 비우는 함수 
@@ -145,7 +147,7 @@ class ConnectFourEnv:
     def step(self, action):
         col = action
         # 경기가 끝나지 않을 때 negative reward 를 줄지 말지는 생각이 필요함 
-        reward = -1/43.
+        reward = 0.
         # reward = 0
         # 떨어뜨리려는 곳이 이미 가득 차있을 때
         # 로직을 바꿔서 이젠 이 if문은 실행되지 않을 것임 
@@ -320,13 +322,6 @@ class ConnectFourEnv:
             self.done = True
 
         
-    def get_next_state(self, state, player, column):
-        next_board = copy.deepcopy(state)
-        for r in range(5, -1, -1):
-            if next_board[r][column] == 0:
-                next_board[r][column] = player
-                break
-        return next_board
 
 
     def step_human(self, col):
@@ -776,115 +771,113 @@ class ConnectFourRandomAgent(nn.Module) :
         #self.target_net.load_state_dict(self.policy_net.state_dict())
 
 
-class Node:
-    def __init__(self, state, prior_prob, turn):
-        self.state = state
-        self.turn = turn
+            
 
-        self.visit_count = 0
-        self.value_sum = 0
-        self.prior_prob = prior_prob
-
-        
-        # (action, child) 가 담겨있는 dict
-        self.children = {}
-
-    def get_value(self):
-        if self.visit_count == 0:
-            return 0
-        return self.value_sum / self.visit_count
-
-    def select_action(self, temp):
-        # 현 node 에서 어떤 action을 취했을때 발생하는 child에 대한 visit_count 모음음
-        visit_counts = np.array([
-            child.visit_count for child in self.children.values()
-            ])
-        
-        actions = np.array([
-            action for action in self.children.keys()
-            ])
-
-        if temp == 0: action = actions[np.argmax(visit_counts)]
-        elif temp == np.inf: action = np.random.choice(actions)
-        else:
-            # visit count distribution을 temperature을 이용해서 계산 
-            vc_dist = visit_counts ** (1 / temp)
-            # 다시 다 더하면 1로 정규화(확률이므로)
-            vc_dist = vc_dist / vc_dist.sum()
-            # 새로 만든 distribution을 이용해서 action sampling
-            action = np.random.choice(actions, p=vc_dist)
-
-        return action
-
-    def select_child(self):
-        best_ucb = -np.inf
-        best_action = -1
-        best_child = None
-
-        for action, child in self.children.items():
-            ucb = child.get_ucb(self, child)
-            if ucb > best_ucb:
-                best_ucb = ucb
-                best_action = action
-                best_child = child
-
-        return best_ucb, best_child
-    
-    def get_ucb(self, child, c_puct=2):
-        prior = child.prior_prob * math.sqrt(self.visit_count) / (child.visit_count + 1)
-        # child 와 node는 적대적 관계이므로 음수를 곱해줌
-        value = - child.get_value()
-
-        ucb = value + c_puct * prior
-
-        return ucb
-    
-    def is_expended(self):
-        if self.children: return True
-        else: return False
-
-
-    def expand(self,turn, action_probs):
-        self.turn = turn
-        for a, prob in enumerate(action_probs):
-            if prob != 0: 
-                self.children[a] = Node(prior_prob=prob, turn=2//turn)
-
-
-class MCTS:
-    def __init__(self, env, model, num_simulations):
+class AlphaZeroAgent:
+    def __init__(self, env:CFEnvforAlphaZero, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):
         self.env = env
-        self.model = model
+        self.model = models[model_num]()
+        self.batch_size = batch_size
         self.num_simulations = num_simulations
+        self.num_iterations = num_iterations
+        self.num_episodes = num_episodes
 
-    def get_one_hot_actions(self, actions):
-        one_hot_actions = [0]*7
-        for action in actions:
-            one_hot_actions[action] = 1
-        return one_hot_actions
+        self.mcts = MCTS(self.env, self.model, self.num_simulations)
+        self.memory = []
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0003)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model.to(self.device)
+
+    def run_episode(self):
+        train_examples = []
+        player = 1
+        state = np.zeros((self.env.row, self.env.col))
+
+        while True:
+            print(state)
+            perspective_state = self.env.get_perspective_state(state, player)
+
+            self.mcts = MCTS(self.env, self.model, self.num_simulations)
+            root = self.mcts.run(perspective_state, turn=1)
+
+            action_probs = np.zeros(self.env.action_size)
+            for key, value in root.children.items():
+                action_probs[key] = value.visit_count
+
+            action_probs = action_probs / np.sum(action_probs)
+            train_examples.append((perspective_state, action_probs, player))
+
+            action = root.select_action(temp=0)
+            state, player = self.env.get_next_state(state, action, player)
+
+            reward = self.env.is_done(state, player)
+
+            # 게임이 끝났다면
+            if reward is not None:
+                episode_record = []
+                for state, action_probs, prev_player in train_examples:
+                    reward_record = reward * (-1)**(prev_player != player)
+                    episode_record.append((state, action_probs, reward_record))
+            
+                return episode_record
+            
+
+    def train(self, epochs):
+        for iter in range(self.num_iterations):
+            print("iter:",iter)
+            for epi in range(self.num_episodes):
+                print("epi:",epi)
+                mem_epi = self.run_episode()
+                self.memory.extend(mem_epi)
+
+            random.shuffle(self.memory)
+            
+            prob_losses, value_losses = [], []
+
+            for epoch in range(epochs):
+                print("epoch:",epoch)
+                batch_num = 0
+
+                while batch_num < int(len(self.memory) / self.batch_size):
+                    print("batch_num:", batch_num)
+                    sample_ids = np.random.randint(len(self.memory), size=self.batch_size)
+                    states, action_probs, values = list(zip(*[self.memory[i] for i in sample_ids]))
+
+                    states = torch.FloatTensor(np.array(states).astype(np.float64)).unsqueeze(1)
+                    target_probs = torch.FloatTensor(np.array(action_probs))
+                    target_values = torch.FloatTensor(np.array(values).astype(np.float64))
+
+                    states = states.contiguous().to(self.device)
+                    target_probs = target_probs.contiguous().to(self.device)
+                    target_values = target_values.contiguous().to(self.device)
+                    # print(states, states.shape)
+
+                    output_probs, output_values = self.model(states)
+                    loss_probs = self.get_loss_probs(target_probs, output_probs)
+                    loss_values = self.get_loss_values(target_values, output_values)
+                    loss = loss_probs + loss_values
+
+
+                    print("target_probs:", target_probs)
+                    print("output_probs:", output_probs)
+                    print("loss_probs: ", loss_probs)
+                    print("loss_values: ", loss_values)
+                    prob_losses.append(float(loss_probs))
+                    value_losses.append(float(loss_values))
+
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
+
+                    batch_num += 1
+
+                print()
+                print("policy loss: ", np.mean(prob_losses))
+                print("value loss: ", np.mean(value_losses))
+
+    def get_loss_probs(self, target_probs, output_probs):
+        return -(target_probs * torch.log(output_probs + np.finfo(float).eps)).mean()
     
-    def run(self, state, turn):
-        root = Node(state=state, prior=0, turn=turn)
-
-        action_probs, value = self.model.predict(state)
-        valid_actions = self.get_one_hot_actions(self.env.valid_actions())
-        action_probs = action_probs * valid_actions
-        action_probs /= np.sum(action_probs)
-
-        root.expand(turn=turn, action_probs=action_probs)
-
-        for _ in range(self.num_simulations):
-            node = root
-            search_path = [node]
-
-            while node.is_expended():
-                action, node = node.select_child()
-                search_path.append(node)
-
-            parent = search_path[-2]
-            state = parent.state
-            next_state = self.env.get_next_state(state, player=1, action=action)
-            
-            next_state = board_normalization(noise=False, env=self.env, model_type="CNN")
-            
-
+    def get_loss_values(self, target_values, output_values):
+        return torch.sum((target_values-output_values.view(-1))**2)/target_values.size()[0]
+    
