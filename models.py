@@ -116,6 +116,57 @@ class RandomModel():
         self.model_name = 'Random'
 
 
+class ResNetforDQN(nn.Module):
+    def __init__(self, num_blocks=3, num_hidden=64):
+        super().__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_type = 'CNN'
+        self.model_name = 'DQN-ResNet-v1'
+        self.start_block = nn.Sequential(
+            nn.Conv2d(1, num_hidden, kernel_size=3, padding=1),
+            nn.BatchNorm2d(num_hidden),
+            nn.ReLU()
+        )
+
+        self.backbone = nn.ModuleList(
+            [ResBlock(num_hidden) for _ in range(num_blocks)]
+        )
+
+        self.policy = nn.Sequential(
+            nn.Conv2d(num_hidden, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(32 * 6 * 7, 7),
+            nn.Tanh()
+        )
+
+        self.to(device)
+
+        
+
+
+    def forward(self, x):
+        x = self.start_block(x)
+
+        for res_block in self.backbone:
+            x = res_block(x)
+        
+        q = self.policy(x)
+
+        return q
+
+    def predict(self, x):
+        x = torch.FloatTensor(x.astype(np.float32)).to(self.device)
+        while x.ndim<=3:
+            x = x.unsqueeze(0)
+        # x = x.view(1, self.size)
+        self.eval()
+        with torch.no_grad():
+            q = self.forward(x)
+
+        return q.data.cpu().numpy()[0]
+
 class AlphaZeroResNet(nn.Module):
     def __init__(self, num_blocks=3, num_hidden=64):
         super().__init__()
