@@ -22,7 +22,7 @@ def save_model(model, filename='selfplayModel'):
 CFenv = env.ConnectFourEnv()
 epi = 10000
 # 일정 step 마다 train 된 agent를 pool에 넣음
-add_pool = 300
+add_pool = 500
 agent = env.ConnectFourDQNAgent(
     lr=0.004315892712310481,
     batch_size=21,
