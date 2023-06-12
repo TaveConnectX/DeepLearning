@@ -44,7 +44,7 @@ agent.train_selfplay(epi=epi, env=CFenv, pool=pool, add_pool=add_pool)
 
 
 op_agent = env.HeuristicAgent()
-record = env.compare_model(agent, ha, n_battle=100)
+record = env.compare_model(agent, op_agent, n_battle=100)
 print(record)
 print("win rate of agent: {}%".format(record[0]))
 
