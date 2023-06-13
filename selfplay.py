@@ -32,6 +32,7 @@ agent = env.ConnectFourDQNAgent(
     model_num=2
 )
 # pretrain 된 모델 불러오기
+# 모델 이름은 임시로 지음, 나중에 일반화된 구현 예정 
 agent.policy_net.load_state_dict(torch.load('model/model_for_selfplay/DQNmodel2_CNN-v1'+'.pth'))
 agent.update_target_net()
 ra = env.ConnectFourRandomAgent()
@@ -42,7 +43,7 @@ agent.train_selfplay(epi=epi, env=CFenv, pool=pool, add_pool=add_pool)
 
 
 
-
+# 일단 간단한 heuristic 모델과의 대전 결과를 출력하도록 함
 op_agent = env.HeuristicAgent()
 record = env.compare_model(agent, op_agent, n_battle=100)
 print(record)

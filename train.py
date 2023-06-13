@@ -10,22 +10,22 @@ import time
 import matplotlib.pyplot as plt
 import os
 
-epi = 10000
+epi = 50000
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
 agent = env.AlphaZeroAgent(env=CFenv)
 
-Qagent = env.ConnectFourDQNAgent(
-    lr=0.004315892712310481,
-    batch_size=21,
+Qagent = env.MinimaxDQNAgent(
+    lr=0.0001,
+    batch_size=128,
     target_update=54,
-    memory_len=10395,
+    memory_len=20000,
     repeat_reward=1,
     model_num=6
 )  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
-Qagent2 = env.ConnectFourRandomAgent()  # 상대 agent
+Qagent2 = env.HeuristicAgent()  # 상대 agent
 
 
 # 모델을 pth 파일로 저장
@@ -121,6 +121,8 @@ if mode == '1':
             state_ = env.board_normalization(False,CFenv, Qagent.policy_net.model_type)
             state = torch.from_numpy(state_).float()
             action = Qagent.select_action(state, valid_actions=CFenv.valid_actions, player=CFenv.player)
+            if isinstance(action, tuple):
+                action = action[0]
             CFenv.step(action)
             CFenv.print_board()
 
