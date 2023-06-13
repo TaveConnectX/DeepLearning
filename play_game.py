@@ -3,13 +3,16 @@ import numpy as np
 import torch
 import time
 
-CF = env.ConnectFourEnv()
+CF = env.ConnectFourEnv(first_player=1)
 mode = input("to play with human, type 'human'(else just enter):")
 CF.print_board()
 
 
 # 나중에 RandomAgent가 추가된다면 ConnectFourDQNAgent(), RandomAgent(), HeuristicAgent() 등등 선택 가능
-agent = env.HeuristicAgent()
+#agent = env.HeuristicAgent()
+agent = env.MinimaxDQNAgent(eps=0, model_num=6)
+agent.policy_net.load_state_dict(torch.load('model/model_9/selfplayModel9_DQN-ResNet-v1.pth'))
+agent.update_target_net()   
 
 while CF.win==0:
     if CF.player==1:
@@ -30,6 +33,7 @@ while CF.win==0:
         state_ = env.board_normalization(False,CF, agent.policy_net.model_type)
         state = torch.from_numpy(state_).float()
         action = agent.select_action(state, valid_actions=CF.valid_actions, player=CF.player)
+        if isinstance(action, tuple): action = action[0]
         CF.step(action)
         CF.print_board()
 

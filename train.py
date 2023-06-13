@@ -10,11 +10,12 @@ import time
 import matplotlib.pyplot as plt
 import os
 
-epi = 50000
+epi = 10000
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
-agent = env.AlphaZeroAgent(env=CFenv)
+# agent with
+# agent = env.AlphaZeroAgent(env=CFenv)
 
 Qagent = env.MinimaxDQNAgent(
     lr=0.0001,
@@ -25,8 +26,10 @@ Qagent = env.MinimaxDQNAgent(
     model_num=6
 )  #학습시킬 agent
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
+# if Qagent is MinimaxDQNAgent and Qagent2 is None,
+# Qagent will train with its own.
 Qagent2 = env.HeuristicAgent()  # 상대 agent
-
+Qagent2 = None
 
 # 모델을 pth 파일로 저장
 def save_model(model, filename='DQNmodel'):
@@ -46,14 +49,11 @@ def load_model(model, filename='DQNmodel'):
     model.load_state_dict(torch.load('model/'+filename+'.pth'))
 
 
-
-
-        
 Qagent.train(epi=epi, env=CFenv, op_model=Qagent2)
 
 
 
-
+if Qagent2 is None: Qagent2 = env.HeuristicAgent()
 record = env.compare_model(Qagent, Qagent2, n_battle=100)
 print(record)
 print("win rate of Qagent: {}%".format(record[0]))

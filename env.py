@@ -808,7 +808,7 @@ class MinimaxDQNAgent(nn.Module):
             distinct_actions = self.get_distinct_actions(state, valid_actions)
         
         if self.is_full_after_my_turn(valid_actions, distinct_actions):
-            return (valid_actions[0], None)
+            return (valid_actions[0], np.random.choice(range(self.action_size)))
         
         if np.random.uniform() < self.eps:
             return (np.random.choice(valid_actions), np.random.choice(valid_actions))
@@ -844,6 +844,10 @@ class MinimaxDQNAgent(nn.Module):
     def train(self,epi,env,op_model):
         env.reset()
 
+        is_op_myself = False
+        if op_model is None:
+            op_model = self
+            is_op_myself = True
         # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
         players = {1: self, 2: op_model}
 
@@ -878,7 +882,9 @@ class MinimaxDQNAgent(nn.Module):
                 action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
                 
                 if isinstance(action, tuple):
+                    op_action_prediction = action[1]
                     action = action[0]
+                   
                 
                 observation, reward, done = env.step(action)
                 op_state_ = board_normalization(noise=True, env=env, model_type=players[turn].policy_net.model_type)
@@ -892,9 +898,12 @@ class MinimaxDQNAgent(nn.Module):
                         if reward > 0: repeat = self.repeat_reward
                         for j in range(repeat):
                             # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
-                            if turn==1:
-                                for i in range(7):
-                                    self.append_memory(state,action,i, reward, op_state*-1, done)
+                            if turn==1 or is_op_myself:
+                                if action == None or op_action_prediction ==None:
+                                    print("this is impossible 3")
+                                    print(state,action,op_action_prediction)
+                                    exit()
+                                self.append_memory(state,action,op_action_prediction, reward, op_state*-1, done)
                                 # print for debugging
                                 # print("for player")
                                 # print("state:\n",torch.round(state).reshape(6,7).int())
@@ -904,7 +913,11 @@ class MinimaxDQNAgent(nn.Module):
                                 # print()
                             # 내가 이겼으므로 상대는 음의 보상을 받음 
                             #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
-                            if turn==2:
+                            if turn==2 or is_op_myself:
+                                if past_action == None or action ==None:
+                                    print("this is impossible 3")
+                                    print(state,past_action, action)
+                                    exit()
                                 self.append_memory(past_state, past_action, action, -reward, op_state, done)
                                 # print for debugging
                                 # print("for opponent")
@@ -916,7 +929,11 @@ class MinimaxDQNAgent(nn.Module):
 
 
                     # 경기가 끝나지 않았다면
-                    elif turn==2:  # 내 경험만 수집한다
+                    elif turn==2 or is_op_myself:  # 내 경험만 수집한다
+                        if past_action == None or action ==None:
+                                print("this is impossible 3")
+                                print(state,past_action, action)
+                                exit()
                         self.append_memory(past_state, past_action, action, past_reward, op_state, past_done)
                         # print for debugging
                         # print("for opponent")
@@ -990,6 +1007,10 @@ class MinimaxDQNAgent(nn.Module):
                 
                 action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
 
+                if isinstance(action, tuple):
+                    op_action_prediction = action[1]
+                    action = action[0]
+
                 observation, reward, done = env.step(action)
                 op_state_ = board_normalization(noise=True, env=env, model_type=players[turn].policy_net.model_type)
                 op_state = torch.from_numpy(op_state_).float() 
@@ -1003,7 +1024,7 @@ class MinimaxDQNAgent(nn.Module):
                         for j in range(repeat):
                             # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
                             if turn==1:
-                                self.append_memory(state,action, reward, op_state*-1, done)
+                                self.append_memory(state,action,op_action_prediction, reward, op_state*-1, done)
                                 # print for debugging
                                 # print("for player")
                                 # print("state:\n",torch.round(state).reshape(6,7).int())
@@ -1014,7 +1035,7 @@ class MinimaxDQNAgent(nn.Module):
                             # 내가 이겼으므로 상대는 음의 보상을 받음 
                             #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
                             if turn==2:
-                                self.append_memory(past_state, past_action, -reward, op_state, done)
+                                self.append_memory(past_state, past_action, action, -reward, op_state, done)
                                 # print for debugging
                                 # print("for opponent")
                                 # print("state:\n",torch.round(past_state).reshape(6,7).int())
@@ -1026,7 +1047,7 @@ class MinimaxDQNAgent(nn.Module):
 
                     # 경기가 끝나지 않았다면
                     elif turn==2:  # 내 경험만 수집한다
-                        self.append_memory(past_state, past_action, past_reward, op_state, past_done)
+                        self.append_memory(past_state, past_action, action, past_reward, op_state, past_done)
                         # print for debugging
                         # print("for opponent")
                         # print("state:\n",torch.round(past_state).reshape(6,7).int())
@@ -1045,7 +1066,7 @@ class MinimaxDQNAgent(nn.Module):
                 
                 # replay buffer 를 이용하여 mini-batch 학습
                 self.replay()
-                if self.steps%add_pool == 0:
+                if self.steps != 0 and self.steps%add_pool == 0:
                     print("added in pool")
                     new_model = copy.deepcopy(self)
                     new_model.policy_net.eval()

@@ -23,18 +23,36 @@ CFenv = env.ConnectFourEnv()
 epi = 10000
 # 일정 step 마다 train 된 agent를 pool에 넣음
 add_pool = 500
-agent = env.ConnectFourDQNAgent(
-    lr=0.004315892712310481,
-    batch_size=21,
-    target_update=54,
-    memory_len=10395,
-    repeat_reward=1,
-    model_num=2
-)
+# pretrain된 모델 불러오기 
+
 # pretrain 된 모델 불러오기
 # 모델 이름은 임시로 지음, 나중에 일반화된 구현 예정 
-agent.policy_net.load_state_dict(torch.load('model/model_for_selfplay/DQNmodel2_CNN-v1'+'.pth'))
-agent.update_target_net()
+# 바꿔야하는 경로를 지정합니다.
+folder_path = "model/model_for_selfplay/"
+file_names = os.listdir(folder_path)
+for file in file_names:
+    if '.pth' in file or '.pt' in file:
+        model_name = file
+    elif '.json' in file:
+        model_config_name = file
+    print(file)
+
+with open(folder_path+model_config_name, 'r') as f:
+    model_config = json.load(f)
+
+print(model_config)
+
+agent = env.MinimaxDQNAgent(
+    lr=model_config['learning rate'],
+    batch_size=model_config['batch_size'],
+    target_update=model_config['target_update'],
+    memory_len=model_config['memory_len'],
+    repeat_reward=model_config['repeat_reward'],
+    model_num=6
+)
+
+agent.policy_net.load_state_dict(torch.load(folder_path+model_name))
+agent.update_target_net()   
 ra = env.ConnectFourRandomAgent()
 pool = [ra]  # pool 만들기, 처음엔 randomagent만 들어있음
 
@@ -112,6 +130,7 @@ if mode == '1':
             state_ = env.board_normalization(False,CFenv, agent.policy_net.model_type)
             state = torch.from_numpy(state_).float()
             action = agent.select_action(state, valid_actions=CFenv.valid_actions, player=CFenv.player)
+            if isinstance(action, tuple): action = action[0]
             CFenv.step(action)
             CFenv.print_board()
 
