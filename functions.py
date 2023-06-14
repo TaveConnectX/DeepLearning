@@ -70,7 +70,7 @@ def compare_model(model1, model2, n_battle=10):
     players = {1:model1, 2:model2}
     records = [0,0,0]  # model1 win, model2 win, draw
     comp_env = ConnectFourEnv()
-
+    step = 0
     for round in range(n_battle):
         comp_env.reset()
 
@@ -81,12 +81,13 @@ def compare_model(model1, model2, n_battle=10):
             state = torch.from_numpy(state_).float()
             
             action = players[turn].select_action(state, valid_actions=comp_env.valid_actions, player=turn)
+            if isinstance(action, tuple): action = action[0]
             comp_env.step(action)
-        
+            step += 1
         if comp_env.win == 1: records[0] += 1
         elif comp_env.win == 2: records[1] += 1
         else: records[2] += 1
-
+        print(step)
     model1.eps = eps1  # restore exploration
 
     return records

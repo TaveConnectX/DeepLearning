@@ -12,7 +12,7 @@ import os
 import json
 import pandas as pd
 
-epi = 2000  # 한 번 학습에 사용할 episode 수 
+epi = 1000  # 한 번 학습에 사용할 episode 수 
 CFenv = env.ConnectFourEnv()  # connect4 환경 생성
 model_num = 6  # 사용할 내 모델 넘버 
 opAgent = env.HeuristicAgent()  # 상대 agent
@@ -46,12 +46,12 @@ for i in range(optimization_trial):
     lr = 10 ** np.random.uniform(-5, -2)
     batch_size = int(2 ** np.random.uniform(4, 10))
     target_update = int(10 ** np.random.uniform(0, 4))
-    memory_len = int(2 ** np.random.uniform(10, 14))
+    memory_len = int(2 ** np.random.uniform(11, 15))
     repeat_reward = int(10 ** np.random.uniform(0,1))
     
                 
     # ================================================
-    Qagent = env.ConnectFourDQNAgent(lr=lr, batch_size=batch_size, target_update=target_update, memory_len=memory_len, repeat_reward=repeat_reward,model_num=model_num)
+    Qagent = env.MinimaxDQNAgent(lr=lr, batch_size=batch_size, target_update=target_update, memory_len=memory_len, repeat_reward=repeat_reward,model_num=model_num)
 
     Qagent.train(epi=epi, env=CFenv, op_model=opAgent)
 
