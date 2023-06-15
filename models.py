@@ -159,7 +159,7 @@ class RandomModel():
 
 
 class ResNetforDQN(nn.Module):
-    def __init__(self, num_blocks=3, num_hidden=64):
+    def __init__(self, num_blocks=3, num_hidden=64, action_size=7):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_type = 'CNN'
@@ -179,7 +179,7 @@ class ResNetforDQN(nn.Module):
             nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(32 * 6 * 7, 49),
+            nn.Linear(32 * 6 * 7, action_size),
             nn.Tanh()
         )
 
@@ -277,3 +277,47 @@ class ResBlock(nn.Module):
 
     def forward(self, x):
         return self.block(x) + x
+    
+
+class DQNModel:
+    def __init__(self, use_conv=True, use_resnet=True, use_minimax=True, command=None):
+        if command == None:
+            self.use_conv = use_conv
+            self.use_resnet = use_resnet
+            self.use_minimax = use_minimax
+            self.command = bin((use_conv<<2) + (use_resnet<<1) + (use_minimax))[2:]
+            while len(self.command) < 3:
+                self.command = '0' + self.command
+        else: 
+            self.command = str(command)
+            if len(self.command) != 3:
+                print("command length error")
+                exit()
+
+        if self.command == '111':
+            self.model = ResNetforDQN(aciton_size=49)
+            self.model.model_name = 'DQN-resnet-minimax-v1'
+        elif self.command == '110':
+            self.model = ResNetforDQN(aciton_size=7)
+            self.model.model_name = 'DQN-resnet-v1'
+        elif self.command == '101':
+            self.model = CFCNN(action_size=49)
+            self.model.model_name = 'DQN-CNN-minimax-v1'
+        elif self.command == '100':
+            self.model = CFCNN(action_size=7)
+            self.model.model_name = 'DQN-CNN-v1'
+        # linear한 상태로는 resnet을 사용할 수 없음
+        elif self.command in ['011', '010']:
+            print("impossible command")
+            exit()
+        elif self.command == '001':
+            self.model = CFLinear(action_size=49)
+            self.model.model_name = 'DQN-linear-minimax-v1'
+        elif self.command == '000':
+            self.model = CFLinear(action_size=7)
+            self.model.model_name = 'DQN-linear-v1'
+        else:
+            print("impossible command")
+            exit()
+
+

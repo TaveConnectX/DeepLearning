@@ -1,5 +1,6 @@
 import os 
 import time 
+import json
 import torch
 import copy 
 import numpy as np 
@@ -40,12 +41,12 @@ def clear():
 
 # env의 board를 normalize 해주는 함수 
 # 2를 -1로 바꿔서 board를 -1~1로 바꿔줌
-def board_normalization(noise:bool,env, model_type:str):
+def board_normalization(noise:bool,env, use_conv:bool):
     # cnn을 사용하지 않는다면, 2차원 board를 1차원으로 바꿔줘야됨 
-    if model_type == "Linear":
-        arr = copy.deepcopy(env.board.flatten())
-    elif model_type == "CNN": 
+    if use_conv:
         arr = copy.deepcopy(env.board)
+    else: 
+        arr = copy.deepcopy(env.board.flatten())
 
 
     """Replace all occurrences of 2 with -1 in a numpy array"""
@@ -58,6 +59,43 @@ def board_normalization(noise:bool,env, model_type:str):
         arr += np.random.randn(*arr.shape)/100.0
 
     return arr
+
+def get_distinct_actions(env):
+    distinct_actions = []
+    for a in env.valid_actions:
+        if env.board[1][a] != 0:
+            distinct_actions.append(a)
+
+        return distinct_actions
+
+# 한 칸만 남았으면 pair 액션이 불가능하므로 체크가 필요 
+def is_full_after_my_turn(valid_actions, distinct_actions):
+    if len(valid_actions)==1 and len(distinct_actions)==1:
+        return True
+    else: return False
+
+def get_minimax_action(q_value,valid_actions, distinct_actions):
+    q_dict = {}
+    for a in valid_actions:
+        q_dict[a] = (None, np.inf)
+        for b in valid_actions:
+            if a in distinct_actions and a==b: continue
+            idx = 7*a + b
+            # print(a,b)
+            # print(q_value[idx])
+            # print(q_dict[a][1])
+            if q_value[idx] <= q_dict[a][1]:
+                q_dict[a] = (b, q_value[idx])
+
+    max_key = None
+    max_value = float('-inf')
+    for a, (b, q) in q_dict.items():
+        if q > max_value:
+            max_key = a
+            max_value = q
+
+    return (max_key, q_dict[max_key][0])
+
 
 
 # 두 모델의 승률을 비교하는 함수
@@ -116,3 +154,20 @@ def simulate_model(model1, model2):
     print("winner is {}p".format(test_env.win))
 
     model1.eps = eps1  # restore exploration
+
+
+
+def get_model_config():
+    with open('config.json', 'r') as f:
+        config = json.load(f)
+    return config
+
+def set_optimizer(optimizer,parameters, lr):
+    if optimizer == 'Adam':
+        return torch.optim.Adam(parameters, lr=lr)
+    elif optimizer == 'SGD':
+        return torch.optim.SGD(parameters, lr=lr)
+    elif optimizer == 'RMSprop':
+        return torch.optim.RMSprop(parameters, lr=lr)
+    else:
+        raise ValueError("optimizer is not defined")

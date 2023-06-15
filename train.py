@@ -18,9 +18,9 @@ CFenv = env.ConnectFourEnv()  # connext4 환경 생성
 # agent = env.AlphaZeroAgent(env=CFenv)
 
 Qagent = env.MinimaxDQNAgent(
-    lr=0.0001,
+    lr=0.00005,
     batch_size=128,
-    target_update=54,
+    target_update=5000,  # 2000 ~ 10000 정도 
     memory_len=20000,
     repeat_reward=1,
     model_num=6
