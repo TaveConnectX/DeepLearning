@@ -2,8 +2,9 @@ import env
 import numpy as np
 import torch
 import time
+import os
 import agent_structure
-from functions import get_model_config
+from functions import get_model_config, get_model_and_config_name
 CF = env.ConnectFourEnv()
 mode = input("to play with human, type 'human'(else just enter):")
 CF.print_board()
@@ -14,7 +15,9 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 config = get_model_config()
 agent = agent_structure.ConnectFourDQNAgent()
 agent.eps = 0
-agent.policy_net.load_state_dict(torch.load('model/model_9/selfplayModel9_DQN-ResNet-v1.pth', map_location=device))
+
+model_name, config_name = get_model_and_config_name('model/model_for_play')
+agent.policy_net.load_state_dict(torch.load('model/model_for_play/'+model_name, map_location=device))
 agent.update_target_net()   
 
 while CF.win==0:

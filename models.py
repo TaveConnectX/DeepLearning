@@ -26,7 +26,7 @@ class CFLinear(nn.Module):
     def forward(self, x):
         y = F.relu(self.linear1(x))
         y = F.relu(self.linear2(y))
-        y = self.linear3(y)
+        y = F.tanh(self.linear3(y))
         return y
 
 # class 가독성을 높이기 위해 network 부분만 따로 분리 
@@ -75,7 +75,7 @@ class CFCNN(nn.Module):
         y = y.view(y.shape[0], -1, 42)  # (N, 12, 42)
         y = y.flatten(start_dim=1)  # (N, 12*42)
         y = F.relu(self.linear1(y))
-        y = self.linear2(y)
+        y = F.tanh(self.linear2(y))
         return y
 
     # def forward(self,x):

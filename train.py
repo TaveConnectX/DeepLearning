@@ -9,7 +9,8 @@ from collections import deque
 import time
 import matplotlib.pyplot as plt
 import os
-from functions import get_model_config, save_model, compare_model
+from functions import get_model_config, save_model, compare_model, \
+                        get_current_time, set_op_agent
 from agent_structure import ConnectFourDQNAgent, HeuristicAgent
 
 
@@ -26,12 +27,10 @@ Qagent = ConnectFourDQNAgent(
     action_size=CFenv.n_col
 )
 
-
-
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
 # if Qagent is MinimaxDQNAgent and Qagent2 is None,
 # Qagent will train with its own.
-Qagent2 = HeuristicAgent()  # 상대 agent
+Qagent2 = set_op_agent(config['op_agent'])  # 상대 agent
 
 
 # # 모델을 pth 파일로 저장
@@ -56,6 +55,7 @@ Qagent.train(epi=config['epi'], env=CFenv, op_model=Qagent2)
 
 
 
+# 여긴 나중에 evaluation으로 바꿔보자 
 if Qagent2 is None: Qagent2 = env.HeuristicAgent()
 record = compare_model(Qagent, Qagent2, n_battle=100)
 print(record)
@@ -65,7 +65,7 @@ print("win rate of Qagent: {}%".format(record[0]))
 
 model_config = {
     'model_type': Qagent.policy_net.model_name,
-    'op_model_type': Qagent2.policy_net.model_name,
+    
     'epi': config['epi'],
     'gamma': Qagent.gamma,
     'learning rate': Qagent.lr,
@@ -75,6 +75,13 @@ model_config = {
     'repeat_reward': Qagent.repeat_reward,
     'win_rate': record[0]/sum(record),
 }
+config['model_name'] = Qagent.policy_net.model_name
+config['win_rate'] = record[0]/sum(record)
+if not config['selfplay']:
+    config['op_model_type'] = Qagent2.policy_net.model_name
+else: config['op_model_type'] = 'HeuristicAgent'
+config['train_time'] = get_current_time()
+
 
 num = 1
 while True:
@@ -86,7 +93,7 @@ while True:
     else: num += 1
 
 with open('model/model_{}/model_config_{}.json'.format(num,num), 'w') as f:
-    json.dump(model_config, f, indent=4, ensure_ascii=False)
+    json.dump(config, f, indent=4, ensure_ascii=False)
 
 
 plt.plot(Qagent.losses)

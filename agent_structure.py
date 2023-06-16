@@ -42,12 +42,13 @@ import json
 
 
 class ConnectFourDQNAgent(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, config=None):
+    def __init__(self, state_size=6*7, action_size=7, **kwargs):
         super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        if config==None:
-            config = get_model_config()
+        config = get_model_config()
+        for key, value in kwargs.items():
+            config[key] = value
 
         self.use_conv=config['use_conv']
         self.use_resnet=config['use_resnet']
@@ -1072,6 +1073,9 @@ class ConnectFourRandomAgent(nn.Module) :
         self.eps = eps 
         self.batch_size = batch_size 
         # self.losses = [] 
+        self.use_conv = False
+        self.use_minimax = False
+        self.use_resnet = False
 
     def select_action(self, state, valid_actions=None, player=1):
         return np.random.choice(valid_actions)

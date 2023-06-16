@@ -1,10 +1,12 @@
 import os 
 import time 
 import json
+import datetime
 import torch
 import copy 
 import numpy as np 
 from env import ConnectFourEnv
+from agent_structure import HeuristicAgent, ConnectFourRandomAgent
 
 # 모델을 pth 파일로 저장
 def save_model(model, filename='Model', folder_num=None):
@@ -156,12 +158,22 @@ def simulate_model(model1, model2):
 
     model1.eps = eps1  # restore exploration
 
-
+def get_current_time():
+    return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def get_model_config():
     with open('config.json', 'r') as f:
         config = json.load(f)
     return config
+
+def get_model_and_config_name(folder_path):
+    file_names = os.listdir(folder_path)
+    for file in file_names:
+        if '.pth' in file or '.pt' in file:
+            model_name = file
+        elif '.json' in file:
+            model_config_name = file
+    return model_name, model_config_name
 
 def set_optimizer(optimizer,parameters, lr):
     if optimizer == 'Adam':
@@ -172,3 +184,12 @@ def set_optimizer(optimizer,parameters, lr):
         return torch.optim.RMSprop(parameters, lr=lr)
     else:
         raise ValueError("optimizer is not defined")
+    
+def set_op_agent(agent_name):
+    if agent_name == "Heuristic":
+        return HeuristicAgent()
+    elif agent_name == "Random":
+        return ConnectFourRandomAgent()
+    elif agent_name == "self":
+        print("not support yet")
+        exit()
