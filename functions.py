@@ -6,7 +6,6 @@ import torch
 import copy 
 import numpy as np 
 from env import ConnectFourEnv
-from agent_structure import HeuristicAgent, ConnectFourRandomAgent
 
 # 모델을 pth 파일로 저장
 def save_model(model, filename='Model', folder_num=None):
@@ -185,11 +184,3 @@ def set_optimizer(optimizer,parameters, lr):
     else:
         raise ValueError("optimizer is not defined")
     
-def set_op_agent(agent_name):
-    if agent_name == "Heuristic":
-        return HeuristicAgent()
-    elif agent_name == "Random":
-        return ConnectFourRandomAgent()
-    elif agent_name == "self":
-        print("not support yet")
-        exit()

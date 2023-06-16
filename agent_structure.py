@@ -40,6 +40,16 @@ import json
 # with open('config.json', 'r') as f:
 #     config = json.load(f)
 
+def set_op_agent(agent_name):
+    if agent_name == "Heuristic":
+        return HeuristicAgent()
+    elif agent_name == "Random":
+        return ConnectFourRandomAgent()
+    elif agent_name == "self":
+        print("not support yet")
+        exit()
+
+
 
 class ConnectFourDQNAgent(nn.Module):
     def __init__(self, state_size=6*7, action_size=7, **kwargs):

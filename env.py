@@ -330,7 +330,7 @@ class ConnectFourEnv:
 
     def step_human(self, col):
         self.step(col)
-        self.print_board()
+        # self.print_board()
 
     # 그냥 random으로 두고 싶을 때 
     def step_cpu(self):

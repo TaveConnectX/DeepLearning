@@ -65,7 +65,7 @@ for i in range(optimization_trial):
     results[(
         "order:"+str(i),
         "lr:"+str(lr), 
-        "batch_size:"+str(batch_size), 
+        "batch_size:"+str(batch_size),  
         "target_update:"+str(target_update), 
         "memory_len:"+str(memory_len), 
         "repeat_reward:"+str(repeat_reward)

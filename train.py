@@ -10,8 +10,8 @@ import time
 import matplotlib.pyplot as plt
 import os
 from functions import get_model_config, save_model, compare_model, \
-                        get_current_time, set_op_agent
-from agent_structure import ConnectFourDQNAgent, HeuristicAgent
+                        get_current_time
+from agent_structure import ConnectFourDQNAgent, HeuristicAgent, set_op_agent
 
 
 config = get_model_config()

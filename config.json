@@ -17,5 +17,5 @@
 
     "use_conv":true,
     "use_resnet":true,
-    "use_minimax":false
+    "use_minimax":true
 }
