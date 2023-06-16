@@ -2,16 +2,19 @@ import env
 import numpy as np
 import torch
 import time
-
-CF = env.ConnectFourEnv(first_player=1)
+import agent_structure
+from functions import get_model_config
+CF = env.ConnectFourEnv()
 mode = input("to play with human, type 'human'(else just enter):")
 CF.print_board()
-
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # 나중에 RandomAgent가 추가된다면 ConnectFourDQNAgent(), RandomAgent(), HeuristicAgent() 등등 선택 가능
 #agent = env.HeuristicAgent()
-agent = env.MinimaxDQNAgent(eps=0, model_num=6)
-agent.policy_net.load_state_dict(torch.load('model/model_9/selfplayModel9_DQN-ResNet-v1.pth'))
+config = get_model_config()
+agent = agent_structure.ConnectFourDQNAgent()
+agent.eps = 0
+agent.policy_net.load_state_dict(torch.load('model/model_9/selfplayModel9_DQN-ResNet-v1.pth', map_location=device))
 agent.update_target_net()   
 
 while CF.win==0:

@@ -9,52 +9,55 @@ from collections import deque
 import time
 import matplotlib.pyplot as plt
 import os
+from functions import get_model_config, save_model, compare_model
+from agent_structure import ConnectFourDQNAgent, HeuristicAgent
 
-epi = 10000
+
+config = get_model_config()
+
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
 # op_update = 100
 CFenv = env.ConnectFourEnv()  # connext4 환경 생성
 # agent with
 # agent = env.AlphaZeroAgent(env=CFenv)
 
-Qagent = env.MinimaxDQNAgent(
-    lr=0.00005,
-    batch_size=128,
-    target_update=5000,  # 2000 ~ 10000 정도 
-    memory_len=20000,
-    repeat_reward=1,
-    model_num=6
-)  #학습시킬 agent
+Qagent = ConnectFourDQNAgent(
+    state_size=CFenv.n_col * CFenv.n_row,
+    action_size=CFenv.n_col
+)
+
+
+
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
 # if Qagent is MinimaxDQNAgent and Qagent2 is None,
 # Qagent will train with its own.
-Qagent2 = env.HeuristicAgent()  # 상대 agent
-Qagent2 = None
+Qagent2 = HeuristicAgent()  # 상대 agent
 
-# 모델을 pth 파일로 저장
-def save_model(model, filename='DQNmodel'):
-    global num
-    model_path = 'model/model_{}/'.format(num)+filename+'{}_'.format(num)+model.model_name+'.pth'
-    if os.path.isfile(model_path):
-        overwrite = input('Overwrite existing model? (Y/n): ')
-        if overwrite == 'n':
-            new_name = input('Enter name of new model:')
-            model_path = 'model/model_{}/'.format(num)+new_name+'_'+model.model_name+'.pth'
+
+# # 모델을 pth 파일로 저장
+# def save_model(model, filename='DQNmodel'):
+#     global num
+#     model_path = 'model/model_{}/'.format(num)+filename+'{}_'.format(num)+model.model_name+'.pth'
+#     if os.path.isfile(model_path):
+#         overwrite = input('Overwrite existing model? (Y/n): ')
+#         if overwrite == 'n':
+#             new_name = input('Enter name of new model:')
+#             model_path = 'model/model_{}/'.format(num)+new_name+'_'+model.model_name+'.pth'
     
     
-    torch.save(model.state_dict(), model_path)
+#     torch.save(model.state_dict(), model_path)
 
-# 모델 load. 매개변수만 load 하는게 overload가 적다고 하여 이 방법을 선택하였음 
-def load_model(model, filename='DQNmodel'):
-    model.load_state_dict(torch.load('model/'+filename+'.pth'))
+# # 모델 load. 매개변수만 load 하는게 overload가 적다고 하여 이 방법을 선택하였음 
+# def load_model(model, filename='DQNmodel'):
+#     model.load_state_dict(torch.load('model/'+filename+'.pth'))
 
 
-Qagent.train(epi=epi, env=CFenv, op_model=Qagent2)
+Qagent.train(epi=config['epi'], env=CFenv, op_model=Qagent2)
 
 
 
 if Qagent2 is None: Qagent2 = env.HeuristicAgent()
-record = env.compare_model(Qagent, Qagent2, n_battle=100)
+record = compare_model(Qagent, Qagent2, n_battle=100)
 print(record)
 print("win rate of Qagent: {}%".format(record[0]))
 
@@ -63,7 +66,7 @@ print("win rate of Qagent: {}%".format(record[0]))
 model_config = {
     'model_type': Qagent.policy_net.model_name,
     'op_model_type': Qagent2.policy_net.model_name,
-    'epi': epi,
+    'epi': config['epi'],
     'gamma': Qagent.gamma,
     'learning rate': Qagent.lr,
     'batch_size': Qagent.batch_size,
@@ -90,7 +93,7 @@ plt.plot(Qagent.losses)
 plt.savefig('model/model_{}/loss_{}.png'.format(num,num))
 plt.show()
 
-save_model(Qagent.policy_net)
+save_model(Qagent.policy_net, folder_num=num)
 
 # for testing
 mode = input("put 1 for test:\n")

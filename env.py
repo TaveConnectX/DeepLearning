@@ -14,15 +14,15 @@ from models import *
 from AlphaZeroenv import MCTS, CFEnvforAlphaZero
 
 
-models = {
-            1:CFLinear,
-            2:CFCNN,
-            3:HeuristicModel,
-            4:RandomModel,
-            5:AlphaZeroResNet,
-            6:ResNetforDQN,
-            7:CNNforMinimax,
-        }
+# models = {
+#             1:CFLinear,
+#             2:CFCNN,
+#             3:HeuristicModel,
+#             4:RandomModel,
+#             5:AlphaZeroResNet,
+#             6:ResNetforDQN,
+#             7:CNNforMinimax,
+#         }
 
 # console 창을 비우는 함수 
 def clear():

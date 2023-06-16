@@ -60,13 +60,14 @@ def board_normalization(noise:bool,env, use_conv:bool):
 
     return arr
 
-def get_distinct_actions(env):
+def get_distinct_actions(state, valid_actions):
+    board = np.round(state)
     distinct_actions = []
-    for a in env.valid_actions:
-        if env.board[1][a] != 0:
+    for a in valid_actions:
+        if board[1][a] != 0:
             distinct_actions.append(a)
 
-        return distinct_actions
+    return distinct_actions
 
 # 한 칸만 남았으면 pair 액션이 불가능하므로 체크가 필요 
 def is_full_after_my_turn(valid_actions, distinct_actions):
@@ -115,7 +116,7 @@ def compare_model(model1, model2, n_battle=10):
         while not comp_env.done:
             # 성능 평가이므로, noise를 주지 않음 
             turn = comp_env.player
-            state_ = board_normalization(noise=False,env=comp_env, model_type=players[turn].policy_net.model_type)
+            state_ = board_normalization(noise=False,env=comp_env, use_conv=players[turn].use_conv)
             state = torch.from_numpy(state_).float()
             
             action = players[turn].select_action(state, valid_actions=comp_env.valid_actions, player=turn)
@@ -125,7 +126,7 @@ def compare_model(model1, model2, n_battle=10):
         if comp_env.win == 1: records[0] += 1
         elif comp_env.win == 2: records[1] += 1
         else: records[2] += 1
-        print(step)
+        # print(step)
     model1.eps = eps1  # restore exploration
 
     return records
@@ -143,7 +144,7 @@ def simulate_model(model1, model2):
     test_env.reset()
     while not test_env.done:
         turn = test_env.player
-        state_ = board_normalization(noise=False, env=test_env, model_type=players[turn].policy_net.model_type)
+        state_ = board_normalization(noise=False, env=test_env, use_conv=players[turn].use_conv)
         state = torch.from_numpy(state_).float()
 
         action = players[turn].select_action(state, valid_actions=test_env.valid_actions, player=turn)

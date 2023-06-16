@@ -10,12 +10,12 @@ import time
 import env
 from functions import compare_model, board_normalization, \
     get_model_config, set_optimizer, \
-    get_distinct_actions, is_full_after_my_turn
+    get_distinct_actions, is_full_after_my_turn, get_minimax_action
 from ReplayBuffer import RandomReplayBuffer
 # models.py 분리 후 이동, 정상 작동하면 지울 듯 
 # import torch.nn.init as init
 # import torch.nn.functional as F
-from models import DQNModel
+from models import DQNModel, HeuristicModel, RandomModel
 import json
 # editable hyperparameters
 # let iter=10000, then
@@ -42,7 +42,7 @@ import json
 
 
 class ConnectFourDQNAgent(nn.Module):
-    def __init__(self, env, state_size=6*7, action_size=7, config=None):
+    def __init__(self, state_size=6*7, action_size=7, config=None):
         super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -97,21 +97,22 @@ class ConnectFourDQNAgent(nn.Module):
         self.losses = []  # loss들을 담는 list 
 
 
-    def select_action(self, state, env, player=1):
+    def select_action(self, state, valid_actions=None, player=1):
         
-
+        if valid_actions == None:
+            valid_actions = range(self.action_size)
         if self.use_minimax:
-            distinct_actions = get_distinct_actions(env)
+            distinct_actions = get_distinct_actions(state, valid_actions)
             
-            if is_full_after_my_turn(env.valid_actions, distinct_actions):
-                return (env.valid_actions[0], np.random.choice(range(self.action_size)))
+            if is_full_after_my_turn(valid_actions, distinct_actions):
+                return (valid_actions[0], np.random.choice(range(self.action_size)))
             if np.random.uniform() < self.eps:
-                return (np.random.choice(env.valid_actions), np.random.choice(env.valid_actions))
+                return (np.random.choice(valid_actions), np.random.choice(valid_actions))
             
         
         else:
             if np.random.uniform() < self.eps:
-                return np.random.choice(env.valid_actions)
+                return np.random.choice(valid_actions)
             
         with torch.no_grad():
             state_ = torch.FloatTensor(state).to(self.device)
@@ -127,15 +128,15 @@ class ConnectFourDQNAgent(nn.Module):
                 # print("state:",state)
                 # print("valid_actions:",valid_actions)
                 # print("q_value:",q_value)
-                a,b = self.get_minimax_action(q_value.squeeze(0),env.valid_actions, distinct_actions)
+                a,b = get_minimax_action(q_value.squeeze(0),valid_actions, distinct_actions)
                 return (a, b)
             
             else:
                 # print("state:",state)
                 # print("valid_actions:",valid_actions)
                 # print("q_value:",q_value)
-                valid_q_values = q_value.squeeze()[torch.tensor(env.valid_actions)]
-                return env.valid_actions[torch.argmax(valid_q_values)]
+                valid_q_values = q_value.squeeze()[torch.tensor(valid_actions)]
+                return valid_actions[torch.argmax(valid_q_values)]
         
     # # replay buffer에 경험 추가 
     # def append_memory(self, state, action, reward, next_state, done):
@@ -188,7 +189,7 @@ class ConnectFourDQNAgent(nn.Module):
                 
                 action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
                 
-                if self.use_minimax:
+                if players[turn].use_minimax:
                     op_action_prediction = action[1]
                     action = action[0]
 
@@ -422,7 +423,7 @@ class ConnectFourDQNAgent(nn.Module):
 
     # mini-batch로 업데이트 
     def replay(self):
-        if len(self.memory) < self.batch_size*2:
+        if self.memory.get_length() < self.batch_size*2:
             return
         
         self.memory.shuffle()
@@ -948,9 +949,12 @@ class MinimaxDQNAgent(nn.Module):
 # model_num=3: Heuristic Model
 # 랜덤으로 두다가 다음 step에 지거나 이길 수 있다면 행동함 
 class HeuristicAgent():
-    def __init__(self, model_num=3):
+    def __init__(self):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.policy_net = models[model_num]()
+        self.policy_net = HeuristicModel()
+        self.use_conv = True
+        self.use_resnet = False
+        self.use_minimax = False
 
 
     # normalize 된 board를 다시 1과 2로 바꿔줌
@@ -971,7 +975,7 @@ class HeuristicAgent():
 
     def select_action(self, state, valid_actions=None, player=1):
         if valid_actions is None:
-            valid_actions = range(self.action_size)
+            valid_actions = range(7)
         if state.ndim == 1: state = state.reshape(6,7)
         rows, cols = state.shape
 
@@ -1053,7 +1057,7 @@ class ConnectFourRandomAgent(nn.Module) :
         
         ### Sangyeon
         # 모델의 type과 name을 지정해주기 위해 수정
-        self.policy_net = models[model_num]()
+        self.policy_net = RandomModel()
         
         # self.target_net = copy.deepcopy(self.policy_net)
         # self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -1106,7 +1110,7 @@ class ConnectFourRandomAgent(nn.Module) :
             
 
 class AlphaZeroAgent:
-    def __init__(self, env:CFEnvforAlphaZero, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):
+    def __init__(self, env, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):
         self.env = env
         self.model = models[model_num]()
         self.batch_size = batch_size

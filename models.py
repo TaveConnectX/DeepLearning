@@ -295,10 +295,10 @@ class DQNModel:
                 exit()
 
         if self.command == '111':
-            self.model = ResNetforDQN(aciton_size=49)
+            self.model = ResNetforDQN(action_size=49)
             self.model.model_name = 'DQN-resnet-minimax-v1'
         elif self.command == '110':
-            self.model = ResNetforDQN(aciton_size=7)
+            self.model = ResNetforDQN(action_size=7)
             self.model.model_name = 'DQN-resnet-v1'
         elif self.command == '101':
             self.model = CFCNN(action_size=49)

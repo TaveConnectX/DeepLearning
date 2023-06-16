@@ -27,6 +27,9 @@ class RandomReplayBuffer:
 
         self.buffer.append((s_,*a,r,s_prime_,d))
     
+    def get_length(self):
+        return len(self.buffer)
+    
     def shuffle(self):
         random.shuffle(self.buffer)
 
