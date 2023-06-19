@@ -10,7 +10,7 @@ import time
 import matplotlib.pyplot as plt
 import os
 from functions import get_model_config, save_model, compare_model, \
-                        get_current_time
+                        get_current_time, get_model_and_config_name, load_model
 from agent_structure import ConnectFourDQNAgent, HeuristicAgent, set_op_agent
 
 
@@ -26,7 +26,19 @@ Qagent = ConnectFourDQNAgent(
     state_size=CFenv.n_col * CFenv.n_row,
     action_size=CFenv.n_col
 )
-
+if config['selfplay']:
+    folder_path = 'model/model_for_selfplay'
+    model_name, model_config = get_model_and_config_name(folder_path)
+    # print(SL_model_name,SL_model_config)
+    # 불러온 config 파일로 모델 껍데기를 만듦
+    prev_model_config = get_model_config(folder_path+'/'+model_config)
+    Qagent = ConnectFourDQNAgent({
+        'use_conv':prev_model_config['use_conv'], \
+        'use_minimax':prev_model_config['use_minimax'], \
+        'use_resnet':prev_model_config['use_resnet']
+    })
+    # 불러온 모델 파일로 모델 업로드
+    load_model(Qagent.policy_net, filename=folder_path+'/'+model_name)
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
 # if Qagent is MinimaxDQNAgent and Qagent2 is None,
 # Qagent will train with its own.

@@ -10,7 +10,8 @@ import time
 import env
 from functions import compare_model, board_normalization, \
     get_model_config, set_optimizer, \
-    get_distinct_actions, is_full_after_my_turn, get_minimax_action
+    get_distinct_actions, is_full_after_my_turn, get_minimax_action, \
+    softmax_policy
 from ReplayBuffer import RandomReplayBuffer
 # models.py 분리 후 이동, 정상 작동하면 지울 듯 
 # import torch.nn.init as init
@@ -47,6 +48,9 @@ def set_op_agent(agent_name):
         return ConnectFourRandomAgent()
     elif agent_name == "self":
         print("not support yet")
+        exit()
+    else:
+        print("invalid op_agent model name")
         exit()
 
 
@@ -103,8 +107,12 @@ class ConnectFourDQNAgent(nn.Module):
         self.target_update = config['target_update']  # target net update 주기(여기선 step)
         self.steps = 0
 
-        self.softmax_policy = config['softmax_policy']
-        self.temp = config['temp']
+        self.epi = config['epi']
+        self.softmax_const = config['softmax_const']
+        self.max_temp = config['max_temp']
+        self.min_temp = config['min_temp']
+        self.temp_decay = (self.min_temp/self.max_temp)**(1/(self.epi*self.softmax_const))
+        self.temp = self.max_temp
         self.eps = config['eps']  # DQN에서 사용될 epsilon
         
         self.batch_size = config['batch_size']  # size of mini-batch
@@ -122,12 +130,12 @@ class ConnectFourDQNAgent(nn.Module):
             
             if is_full_after_my_turn(valid_actions, distinct_actions):
                 return (valid_actions[0], np.random.choice(range(self.action_size)))
-            if np.max(np.random.uniform(), self.softmax_policy) < self.eps:
+            if np.max([np.random.uniform(), self.softmax_const]) < self.eps:
                 return (np.random.choice(valid_actions), np.random.choice(valid_actions))
             
         
         else:
-            if np.random.uniform() < self.eps:
+            if np.max([np.random.uniform(), self.softmax_const]) < self.eps:
                 return np.random.choice(valid_actions)
             
         with torch.no_grad():
@@ -140,14 +148,19 @@ class ConnectFourDQNAgent(nn.Module):
 
             q_value = self.policy_net(state_)
 
+            # temp=0 은 greedy action을 의미하므로
+            temp = 0 if self.temp < self.eps else self.temp
+
             if self.use_minimax:
                 # print("state:",state)
                 # print("valid_actions:",valid_actions)
                 # print("q_value:",q_value)
+                
                 a,b = get_minimax_action(
                     q_value.squeeze(0),
                     valid_actions, 
-                    distinct_actions
+                    distinct_actions,
+                    temp=temp
                 )
                 return (a, b)
             
@@ -155,8 +168,16 @@ class ConnectFourDQNAgent(nn.Module):
                 # print("state:",state)
                 # print("valid_actions:",valid_actions)
                 # print("q_value:",q_value)
-                valid_q_values = q_value.squeeze()[torch.tensor(valid_actions)]
-                return valid_actions[torch.argmax(valid_q_values)]
+                
+                valid_q_values = q_value.squeeze()[torch.tensor(valid_actions)].to(self.device)
+                valid_index_q_values = torch.stack([torch.tensor(valid_actions).to(self.device), valid_q_values], dim=0)
+                
+                valid_index_q_values = torch.transpose(valid_index_q_values,0,1)
+                action, value = softmax_policy(valid_index_q_values,temp=temp)
+
+                return action
+
+                # return valid_actions[torch.argmax(valid_q_values)]
         
     # # replay buffer에 경험 추가 
     # def append_memory(self, state, action, reward, next_state, done):
@@ -189,7 +210,8 @@ class ConnectFourDQNAgent(nn.Module):
                 print(record)
                 print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
                 print("loss:",sum(self.losses[-101:-1])/100.)
-                print("epsilon:",self.eps)
+                if self.eps > self.softmax_const: print("epsilon:",self.eps)
+                else: print("temp:",self.temp)
                 # simulate_model() 을 실행시키면 직접 행동 관찰 가능
                 # simulate_model(self, op_model)
 
@@ -212,7 +234,7 @@ class ConnectFourDQNAgent(nn.Module):
                 if players[turn].use_minimax:
                     op_action_prediction = action[1]
                     action = action[0]
-
+                
                 observation, reward, done = env.step(action)
                 op_state_ = board_normalization(noise=True, env=env, use_conv=players[turn].use_conv)
                 op_state = torch.from_numpy(op_state_).float() 
@@ -297,6 +319,7 @@ class ConnectFourDQNAgent(nn.Module):
                     new_model.policy_net.eval()
                     new_model.target_net.eval()
                     new_model.eps = 0
+                    new_model.temp = 0.1
                     pool.append(new_model)
                 # if Qagent.memory and abs(Qagent.memory[-1][2])!=1:
                 #     print("state:\n",torch.round(Qagent.memory[-1][0]).int())
@@ -311,6 +334,8 @@ class ConnectFourDQNAgent(nn.Module):
             # epsilon-greedy
             # min epsilon을 가지기 전까지 episode마다 조금씩 낮춰준다(1 -> 0.1)
             if self.eps > 0.1: self.eps -= (1/epi)
+            if self.eps < self.softmax_const:
+                self.temp *= self.temp_decay
 
 
     def train_selfplay(self, epi, env, pool, add_pool):

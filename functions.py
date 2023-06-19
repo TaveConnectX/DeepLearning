@@ -64,10 +64,10 @@ def board_normalization(noise:bool,env, use_conv:bool):
     return arr
 
 def get_distinct_actions(state, valid_actions):
-    board = np.round(state)
+    board = np.round(state).reshape(6,7)
     distinct_actions = []
     for a in valid_actions:
-        if board[1][a] != 0:
+        if board[1,a] != 0:
             distinct_actions.append(a)
 
     return distinct_actions
@@ -78,28 +78,48 @@ def is_full_after_my_turn(valid_actions, distinct_actions):
         return True
     else: return False
 
-def get_minimax_action(q_value,valid_actions, distinct_actions):
+# def get_minimax_action(q_value,valid_actions, distinct_actions):
+#     q_dict = {}
+#     for a in valid_actions:
+#         q_dict[a] = (None, np.inf)
+#         for b in valid_actions:
+#             if a in distinct_actions and a==b: continue
+#             idx = 7*a + b
+#             # print(a,b)
+#             # print(q_value[idx])
+#             # print(q_dict[a][1])
+#             if q_value[idx] <= q_dict[a][1]:
+#                 q_dict[a] = (b, q_value[idx])
+
+#     max_key = None
+#     max_value = float('-inf')
+#     for a, (b, q) in q_dict.items():
+#         if q > max_value:
+#             max_key = a
+#             max_value = q
+
+#     return (max_key, q_dict[max_key][0])
+
+# softmax를 포함한 minimax action sampling
+def get_minimax_action(q_value,valid_actions, distinct_actions, temp=0):
     q_dict = {}
     for a in valid_actions:
-        q_dict[a] = (None, np.inf)
+        q_dict[a] = []
         for b in valid_actions:
             if a in distinct_actions and a==b: continue
             idx = 7*a + b
             # print(a,b)
             # print(q_value[idx])
             # print(q_dict[a][1])
-            if q_value[idx] <= q_dict[a][1]:
-                q_dict[a] = (b, q_value[idx])
+            q_dict[a].append((b, -q_value[idx]))
+        op_action, value = softmax_policy(torch.tensor(q_dict[a]), temp=temp)
+        q_dict[a] = (op_action, -1 * value)
 
-    max_key = None
-    max_value = float('-inf')
-    for a, (b, q) in q_dict.items():
-        if q > max_value:
-            max_key = a
-            max_value = q
+    qs_my_turn = [[key, value[1]] for key, value in q_dict.items()]
+    action, value = softmax_policy(torch.tensor(qs_my_turn), temp=temp)
 
-    return (max_key, q_dict[max_key][0])
 
+    return (action, q_dict[action][0])
 
 
 # 두 모델의 승률을 비교하는 함수
@@ -179,21 +199,35 @@ def get_model_and_config_name(folder_path):
     return model_name, model_config_name
 
 
-def softmax_policy(z, T): 
-    T += np.finfo(np.float32).tiny
-    z = np.array(z)
+# z: [(idx1, value1), (idx2, value2), ...] 으로 이루어져있어야함 
+def softmax_policy(z, temp): 
+    if not isinstance(z, torch.Tensor):
+        z = torch.Tensor(z)
+    temp += torch.finfo(z.dtype).tiny
+    # z = np.array(z)
+    if z.dim() == 1:
+        z = torch.tensor([(idx, value) for idx, value in np.ndenumerate(z)])
+    if z.dim() == 2:
+        idxs = z[:,0]
+        values = z[:,1]
+
+    values = np.array(values.cpu())
     # print(z)
-    z = z / T 
-    # print(z)
-    max_z = np.max(z) 
-    # print(max_z)
-    exp_z = np.exp(z-max_z) 
-    # print(exp_z)
-    sum_exp_z = np.sum(exp_z)
-    # print(sum_exp_z)
-    y = exp_z / sum_exp_z
+    values = values / temp
+    # print(values)
+    max_v = np.max(values)
+    #print(max_v)
+    exp_v = np.exp(values-max_v) 
+    #print(exp_v)
+    sum_exp_v = np.sum(exp_v)
+    #print(sum_exp_v)
+    y = exp_v / sum_exp_v
     # print(y)
-    return y
+    # print("sum of y:",np.sum(y))
+    action = np.random.choice(idxs.cpu(), p=y)
+    value = next(pair[1] for pair in z if pair[0] == action)
+
+    return int(action), value
 
 def set_optimizer(optimizer,parameters, lr):
     if optimizer == 'Adam':
