@@ -15,7 +15,7 @@ def print_board_while_gaming(env, pointer, board=None):
     print("Connect Four")
     print("Player1: X")
     print("Player2: O")
-    print("------------------------------------")
+    print("-----------------------")
     empty_space = [" "]*env.n_col
     empty_space[pointer] = "X" if env.player == 1 else "O"
     if board is None:
@@ -87,6 +87,7 @@ while CF.win==0:
                 time.sleep(0.15)
             CF.step_human(pointer)
             time.sleep(0.1)
+            
         # move left
         if keyboard.is_pressed("left"):
             if pointer>0: pointer -= 1

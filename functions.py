@@ -34,7 +34,9 @@ def save_model(model, filename='Model', folder_num=None):
 
 # 모델 load. 매개변수만 load 하는게 overload가 적다고 하여 이 방법을 선택하였음 
 def load_model(model, filename='Model'):
-    model.load_state_dict(torch.load('model/'+filename+'.pth'))
+    if not '.pth' in filename or not '.pt' in filename:
+        filename += '.pth'
+    model.load_state_dict(torch.load(filename))
 
 # console 창을 비우는 함수 
 def clear():
@@ -160,8 +162,10 @@ def simulate_model(model1, model2):
 def get_current_time():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-def get_model_config():
-    with open('config.json', 'r') as f:
+def get_model_config(file_name=None):
+    if file_name is None:
+        file_name = 'config.json'
+    with open(file_name, 'r') as f:
         config = json.load(f)
     return config
 

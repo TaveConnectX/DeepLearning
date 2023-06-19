@@ -52,11 +52,11 @@ def set_op_agent(agent_name):
 
 
 class ConnectFourDQNAgent(nn.Module):
-    def __init__(self, state_size=6*7, action_size=7, **kwargs):
+    def __init__(self, state_size=6*7, action_size=7, config_file_name=None, **kwargs):
         super(ConnectFourDQNAgent,self).__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        config = get_model_config()
+        config = get_model_config(config_file_name)
         for key, value in kwargs.items():
             config[key] = value
 
