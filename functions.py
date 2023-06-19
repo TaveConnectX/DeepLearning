@@ -178,6 +178,23 @@ def get_model_and_config_name(folder_path):
             model_config_name = file
     return model_name, model_config_name
 
+
+def softmax_policy(z, T): 
+    T += np.finfo(np.float32).tiny
+    z = np.array(z)
+    # print(z)
+    z = z / T 
+    # print(z)
+    max_z = np.max(z) 
+    # print(max_z)
+    exp_z = np.exp(z-max_z) 
+    # print(exp_z)
+    sum_exp_z = np.sum(exp_z)
+    # print(sum_exp_z)
+    y = exp_z / sum_exp_z
+    # print(y)
+    return y
+
 def set_optimizer(optimizer,parameters, lr):
     if optimizer == 'Adam':
         return torch.optim.Adam(parameters, lr=lr)

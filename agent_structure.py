@@ -102,7 +102,11 @@ class ConnectFourDQNAgent(nn.Module):
         self.action_size = action_size
         self.target_update = config['target_update']  # target net update 주기(여기선 step)
         self.steps = 0
+
+        self.softmax_policy = config['softmax_policy']
+        self.temp = config['temp']
         self.eps = config['eps']  # DQN에서 사용될 epsilon
+        
         self.batch_size = config['batch_size']  # size of mini-batch
         self.repeat_reward = config['repeat_reward']  # repeat reward
         self.losses = []  # loss들을 담는 list 
@@ -112,12 +116,13 @@ class ConnectFourDQNAgent(nn.Module):
         
         if valid_actions == None:
             valid_actions = range(self.action_size)
+
         if self.use_minimax:
             distinct_actions = get_distinct_actions(state, valid_actions)
             
             if is_full_after_my_turn(valid_actions, distinct_actions):
                 return (valid_actions[0], np.random.choice(range(self.action_size)))
-            if np.random.uniform() < self.eps:
+            if np.max(np.random.uniform(), self.softmax_policy) < self.eps:
                 return (np.random.choice(valid_actions), np.random.choice(valid_actions))
             
         
@@ -139,7 +144,11 @@ class ConnectFourDQNAgent(nn.Module):
                 # print("state:",state)
                 # print("valid_actions:",valid_actions)
                 # print("q_value:",q_value)
-                a,b = get_minimax_action(q_value.squeeze(0),valid_actions, distinct_actions)
+                a,b = get_minimax_action(
+                    q_value.squeeze(0),
+                    valid_actions, 
+                    distinct_actions
+                )
                 return (a, b)
             
             else:
