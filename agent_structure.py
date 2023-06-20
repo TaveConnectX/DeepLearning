@@ -8,15 +8,16 @@ import torch
 from torch import nn, optim
 import time
 import env
-from functions import compare_model, board_normalization, \
+from env import Tree, Node, compare_model
+from functions import board_normalization, \
     get_model_config, set_optimizer, \
     get_distinct_actions, is_full_after_my_turn, get_minimax_action, \
-    softmax_policy
+    softmax_policy, get_valid_actions, get_next_board
 from ReplayBuffer import RandomReplayBuffer
 # models.py 분리 후 이동, 정상 작동하면 지울 듯 
 # import torch.nn.init as init
 # import torch.nn.functional as F
-from models import DQNModel, HeuristicModel, RandomModel
+from models import DQNModel, HeuristicModel, RandomModel, MinimaxModel
 import json
 # editable hyperparameters
 # let iter=10000, then
@@ -46,6 +47,8 @@ def set_op_agent(agent_name):
         return HeuristicAgent()
     elif agent_name == "Random":
         return ConnectFourRandomAgent()
+    elif agent_name == "Minimax":
+        return MinimaxAgent()
     elif agent_name == "self":
         print("not support yet")
         exit()
@@ -120,13 +123,12 @@ class ConnectFourDQNAgent(nn.Module):
         self.losses = []  # loss들을 담는 list 
 
 
-    def select_action(self, state, valid_actions=None, player=1):
+    def select_action(self, state, env, player=1):
         
-        if valid_actions == None:
-            valid_actions = range(self.action_size)
+        valid_actions = env.valid_actions
 
         if self.use_minimax:
-            distinct_actions = get_distinct_actions(state, valid_actions)
+            distinct_actions = get_distinct_actions(env)
             
             if is_full_after_my_turn(valid_actions, distinct_actions):
                 return (valid_actions[0], np.random.choice(range(self.action_size)))
@@ -229,7 +231,7 @@ class ConnectFourDQNAgent(nn.Module):
                 turn = env.player
                 op_turn = 2//turn
                 
-                action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
+                action = players[turn].select_action(state, env, player=turn)
                 
                 if players[turn].use_minimax:
                     op_action_prediction = action[1]
@@ -374,7 +376,7 @@ class ConnectFourDQNAgent(nn.Module):
                 turn = env.player
                 op_turn = 2//turn
                 
-                action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
+                action = players[turn].select_action(state, env, player=turn)
                 if self.use_minimax:
                     op_action_prediction = action[1]
                     action = action[0]
@@ -584,14 +586,7 @@ class MinimaxDQNAgent(nn.Module):
         self.repeat_reward = repeat_reward
         self.losses = []  # loss들을 담는 list 
 
-    def get_distinct_actions(self, state, valid_actions):
-        state_ = np.round(state)
-        distinct_actions = []
-        for a in valid_actions:
-            if state_[1][a] != 0:
-                distinct_actions.append(a)
-
-        return distinct_actions
+   
 
 
     # 한 칸만 남았으면 pair 액션이 불가능하므로 체크가 필요 
@@ -622,11 +617,9 @@ class MinimaxDQNAgent(nn.Module):
 
         return (max_key, q_dict[max_key][0])
     
-    def select_action(self, state, valid_actions=None, player=1):
-        if valid_actions is None:
-            valid_actions = range(self.action_size)
-        else:
-            distinct_actions = self.get_distinct_actions(state, valid_actions)
+    def select_action(self, state, env, player=1):
+        valid_actions = env.valid_actions
+        distinct_actions = get_distinct_actions(env)
         
         if self.is_full_after_my_turn(valid_actions, distinct_actions):
             return (valid_actions[0], np.random.choice(range(self.action_size)))
@@ -700,7 +693,7 @@ class MinimaxDQNAgent(nn.Module):
                 turn = env.player
                 op_turn = 2//turn
                 
-                action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
+                action = players[turn].select_action(state, env, player=turn)
                 
                 if isinstance(action, tuple):
                     op_action_prediction = action[1]
@@ -826,7 +819,7 @@ class MinimaxDQNAgent(nn.Module):
                 turn = env.player
                 op_turn = 2//turn
                 
-                action = players[turn].select_action(state, valid_actions=env.valid_actions, player=turn)
+                action = players[turn].select_action(state, env, player=turn)
 
                 if isinstance(action, tuple):
                     op_action_prediction = action[1]
@@ -1018,9 +1011,9 @@ class HeuristicAgent():
                 break
         return next_board
 
-    def select_action(self, state, valid_actions=None, player=1):
-        if valid_actions is None:
-            valid_actions = range(7)
+    def select_action(self, state, env, player=1):
+        valid_actions = env.valid_actions
+
         if state.ndim == 1: state = state.reshape(6,7)
         rows, cols = state.shape
 
@@ -1121,8 +1114,8 @@ class ConnectFourRandomAgent(nn.Module) :
         self.use_minimax = False
         self.use_resnet = False
 
-    def select_action(self, state, valid_actions=None, player=1):
-        return np.random.choice(valid_actions)
+    def select_action(self, state, env, player=1):
+        return np.random.choice(env.valid_actions)
         
     def append_memory(self, state, action, reward, next_state, done):
         pass
@@ -1155,7 +1148,131 @@ class ConnectFourRandomAgent(nn.Module) :
         #self.target_net.load_state_dict(self.policy_net.state_dict())
 
 
-            
+
+
+# agent that moves from minimax tree policy       
+class MinimaxAgent():
+    def __init__(self, depth=6):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.policy_net = MinimaxModel()
+        self.use_conv = True
+        self.use_resnet = False
+        self.use_minimax = False
+
+        self.tree = Tree()
+        self.depth = depth
+
+
+    # normalize 된 board를 다시 1과 2로 바꿔줌
+    def arr2board(self, state):
+        state_ = copy.deepcopy(np.array(state.reshape(6,7)))
+        state_ = np.round(state_).astype(int)
+        state_[state_==-1] = 2
+
+        return state_
+    
+    # 현재 보드 상태에서 이긴 플레이어가 있는지 확인
+    def is_winner(self, board, player):
+        rows, cols = board.shape
+        # 수평 체크
+        for row in range(rows):
+            for col in range(cols - 3):
+                if board[row][col] == player and board[row][col+1] == player and board[row][col+2] == player and board[row][col+3] == player:
+                    return True
+
+        # 수직 체크
+        for row in range(rows - 3):
+            for col in range(cols):
+                if board[row][col] == player and board[row+1][col] == player and board[row+2][col] == player and board[row+3][col] == player:
+                    return True
+
+        # 오른쪽 위로 대각선 체크
+        for row in range(rows - 3):
+            for col in range(cols - 3):
+                if board[row][col] == player and board[row+1][col+1] == player and board[row+2][col+2] == player and board[row+3][col+3] == player:
+                    return True
+
+        # 왼쪽 위로 대각선 체크
+        for row in range(3, rows):
+            for col in range(cols - 3):
+                if board[row][col] == player and board[row-1][col+1] == player and board[row-2][col+2] == player and board[row-3][col+3] == player:
+                    return True
+
+        return False
+    
+    # Minimax 알고리즘
+    def minimax(self, board, depth, alpha, beta, maximizingPlayer, player):
+        valid_moves = get_valid_actions(board)
+
+        # 재귀 종료 조건
+        if depth == 0 or len(valid_moves) == 0 or self.is_winner(board, 1) or self.is_winner(board, 2):
+            if self.is_winner(board, player):
+                return (None, 100000000000000)
+            elif self.is_winner(board, 2//player):
+                return (None, -100000000000000)
+            else:
+                return (None, 0)
+
+        if maximizingPlayer:
+            value = -np.Inf
+            best_move = np.random.choice(valid_moves)
+            for col in valid_moves:
+                temp_board = board.copy()
+                temp_board = get_next_board(temp_board, col, player)
+                # print(temp_board)
+                new_score = self.minimax(temp_board, depth - 1, alpha, beta, False, 2//player)[1]
+                if new_score > value:
+                    value = new_score
+                    best_move = col
+                alpha = max(alpha, value)
+                if alpha >= beta:
+                    break
+                # if value==0: best_move = np.random.choice(valid_moves)
+            return best_move, value
+        else:
+            value = np.Inf
+            best_move = np.random.choice(valid_moves)
+            for col in valid_moves:
+                temp_board = board.copy()
+                temp_board = get_next_board(temp_board, col, player)
+                # print(temp_board)
+                new_score = self.minimax(temp_board, depth - 1, alpha, beta, True, 2//player)[1]
+                if new_score < value:
+                    value = new_score
+                    best_move = col
+                beta = min(beta, value)
+                if alpha >= beta:
+                    break
+            return best_move, value
+
+    def put_piece(self, board, col, player):
+        next_board = copy.deepcopy(board)
+        for r in range(5, -1, -1):
+            if next_board[r][col] == 0:
+                next_board[r][col] = player
+                break
+        return next_board
+
+    
+    # 최적의 수(column) 반환
+    def select_action(self, state, env, player):
+        board = copy.deepcopy(env.board)
+        depth = self.depth
+        move, value = self.minimax(
+            board,\
+            depth, \
+            alpha=-np.Inf,\
+            beta=np.Inf, \
+            maximizingPlayer=True, \
+            player=player
+        )
+        # if value == 0:
+        #     return np.random.choice(env.valid_actions)
+        return move
+
+
+
+
 
 class AlphaZeroAgent:
     def __init__(self, env, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):

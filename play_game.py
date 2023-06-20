@@ -6,7 +6,7 @@ import os
 import copy
 import random
 import keyboard
-from agent_structure import ConnectFourDQNAgent
+from agent_structure import ConnectFourDQNAgent, MinimaxAgent
 from functions import get_model_config, get_model_and_config_name
 
 
@@ -51,7 +51,7 @@ def print_board_while_gaming(env, pointer, board=None):
 
 
 
-CF = env.ConnectFourEnv()
+CF = env.ConnectFourEnv(first_player=2)
 mode = input("to play with human, type 'human'(else just enter):")
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -66,6 +66,7 @@ model_name, config_name = get_model_and_config_name('model/model_for_play')
 agent.policy_net.load_state_dict(torch.load('model/model_for_play/'+model_name, map_location=device))
 agent.update_target_net()   
 
+agent = MinimaxAgent()
 pointer = 3
 new_pointer = 3
 
@@ -112,7 +113,7 @@ while CF.win==0:
         time.sleep(thinking_time)
         state_ = env.board_normalization(True,CF, agent.policy_net.model_type)
         state = torch.from_numpy(state_).float()
-        action = agent.select_action(state, valid_actions=CF.valid_actions, player=CF.player)
+        action = agent.select_action(state, CF, player=CF.player)
         if isinstance(action, tuple): action = action[0]
         
         while op_pointer != action:

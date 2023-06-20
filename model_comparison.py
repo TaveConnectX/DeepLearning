@@ -38,7 +38,7 @@ if is_simulation:
             turn = CFenv.player
             state_ = env.board_normalization(False,CFenv, agents[turn].policy_net.model_type)
             state = torch.from_numpy(state_).float()
-            action = agents[turn].select_action(state, valid_actions=CFenv.valid_actions, player=turn)
+            action = agents[turn].select_action(state, CFenv, player=turn)
             if isinstance(action, tuple): action = action[0]
             CFenv.step(action)
             CFenv.print_board(clear_board=False)

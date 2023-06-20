@@ -157,6 +157,10 @@ class RandomModel():
         self.model_type = 'CNN'
         self.model_name = 'Random'
 
+class MinimaxModel():
+    def __init__(self):
+        self.model_type = 'CNN'
+        self.model_name = 'Minimax-tree'
 
 class ResNetforDQN(nn.Module):
     def __init__(self, num_blocks=3, num_hidden=64, action_size=7):

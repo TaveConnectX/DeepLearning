@@ -12,7 +12,7 @@ import time
 # import torch.nn.functional as F
 from models import *
 from AlphaZeroenv import MCTS, CFEnvforAlphaZero
-
+from functions import get_valid_actions, get_next_board
 
 # models = {
 #             1:CFLinear,
@@ -69,7 +69,7 @@ def compare_model(model1, model2, n_battle=10):
             state_ = board_normalization(noise=False,env=comp_env, model_type=players[turn].policy_net.model_type)
             state = torch.from_numpy(state_).float()
             
-            action = players[turn].select_action(state, valid_actions=comp_env.valid_actions, player=turn)
+            action = players[turn].select_action(state, comp_env, player=turn)
             if isinstance(action, tuple):
                 action = action[0]
             comp_env.step(action)
@@ -97,7 +97,7 @@ def simulate_model(model1, model2):
         state_ = board_normalization(noise=False, env=test_env, model_type=players[turn].policy_net.model_type)
         state = torch.from_numpy(state_).float()
 
-        action = players[turn].select_action(state, valid_actions=test_env.valid_actions, player=turn)
+        action = players[turn].select_action(state, test_env, player=turn)
         test_env.step(action)
         test_env.print_board(clear_board=False)
         print("{}p put piece on {}".format(turn, action))
@@ -339,7 +339,35 @@ class ConnectFourEnv:
 
 
 
+class Node():
+    def __init__(self, data=None, children={}, player=None):
+        self.data = data
+        self.parent = None
+        self.children = children
+        self.player = None
 
 
-    
+class Tree():
+    def __init__(self, state=None):
+        self.root = Node(data=state)
+        self.cur = self.root
+
+    def branch(self, node):
+        valid_actions = get_valid_actions(node.data)
+        for action in valid_actions:
+            next_board = get_next_board(node.data, action)
+            node.children[action] = Node(next_board, player=2//node.player)
+            node.children[action].parent = node
+
+    def set_root(self, node):
+        node.parent = None
+        self.root = node
+        self.cur = self.root
+
+    def get_root(self):
+        self.cur = self.root
+
+    def get_parent(self):
+        self.cur = self.cur.parent
+
 

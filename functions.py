@@ -5,7 +5,6 @@ import datetime
 import torch
 import copy 
 import numpy as np 
-from env import ConnectFourEnv
 
 # 모델을 pth 파일로 저장
 def save_model(model, filename='Model', folder_num=None):
@@ -63,8 +62,11 @@ def board_normalization(noise:bool,env, use_conv:bool):
 
     return arr
 
-def get_distinct_actions(state, valid_actions):
-    board = np.round(state).reshape(6,7)
+def get_distinct_actions(env):
+    board = env.board
+    valid_actions = env.valid_actions
+    board = np.array(board).reshape(6,7)
+
     distinct_actions = []
     for a in valid_actions:
         if board[1,a] != 0:
@@ -121,63 +123,79 @@ def get_minimax_action(q_value,valid_actions, distinct_actions, temp=0):
 
     return (action, q_dict[action][0])
 
+def get_valid_actions(board):
+    valid_actions = []
+    for i in range(7):
+        if board[0,i] == 0:
+            valid_actions.append(i)
+    return valid_actions
 
-# 두 모델의 승률을 비교하는 함수
-# n_battle 만큼 서로의 policy로 대결하여 
-# [model1's win, model2's win, draw] 리스트를 리턴 
-def compare_model(model1, model2, n_battle=10):
-    # epsilon을 복원하지 않으면, 학습 내내 고정됨 
-    eps1 = model1.eps
-    model1.eps = 0  # no exploration
-    players = {1:model1, 2:model2}
-    records = [0,0,0]  # model1 win, model2 win, draw
-    comp_env = ConnectFourEnv()
-    step = 0
-    for round in range(n_battle):
-        comp_env.reset()
+def get_next_board(board, action, player):
+    next_board = copy.deepcopy(board)
+    if board[0,action] != 0:
+        print("invalid action")
+        exit()
+    for row in range(5,-1,-1):
+        if next_board[row,action] == 0:
+            next_board[row,action] = player
+            return next_board
 
-        while not comp_env.done:
-            # 성능 평가이므로, noise를 주지 않음 
-            turn = comp_env.player
-            state_ = board_normalization(noise=False,env=comp_env, use_conv=players[turn].use_conv)
-            state = torch.from_numpy(state_).float()
+# # 두 모델의 승률을 비교하는 함수
+# # n_battle 만큼 서로의 policy로 대결하여 
+# # [model1's win, model2's win, draw] 리스트를 리턴 
+# def compare_model(model1, model2, n_battle=10):
+#     # epsilon을 복원하지 않으면, 학습 내내 고정됨 
+#     eps1 = model1.eps
+#     model1.eps = 0  # no exploration
+#     players = {1:model1, 2:model2}
+#     records = [0,0,0]  # model1 win, model2 win, draw
+#     comp_env = ConnectFourEnv()
+#     step = 0
+#     for round in range(n_battle):
+#         comp_env.reset()
+
+#         while not comp_env.done:
+#             # 성능 평가이므로, noise를 주지 않음 
+#             turn = comp_env.player
+#             state_ = board_normalization(noise=False,env=comp_env, use_conv=players[turn].use_conv)
+#             state = torch.from_numpy(state_).float()
             
-            action = players[turn].select_action(state, valid_actions=comp_env.valid_actions, player=turn)
-            if isinstance(action, tuple): action = action[0]
-            comp_env.step(action)
-            step += 1
-        if comp_env.win == 1: records[0] += 1
-        elif comp_env.win == 2: records[1] += 1
-        else: records[2] += 1
-        # print(step)
-    model1.eps = eps1  # restore exploration
+#             action = players[turn].select_action(state, comp_env, player=turn)
+#             if isinstance(action, tuple): action = action[0]
+#             comp_env.step(action)
+#             step += 1
+#         if comp_env.win == 1: records[0] += 1
+#         elif comp_env.win == 2: records[1] += 1
+#         else: records[2] += 1
+#         # print(step)
+#     model1.eps = eps1  # restore exploration
 
-    return records
+#     return records
 
 
-# model1과 model2의 policy에 따라
-# 어떻게 플레이 하는지를 직접 확인가능
-def simulate_model(model1, model2):
-    eps1 = model1.eps
-    model1.eps = 0  # no exploration
-    players = {1:model1, 2:model2}
+# # model1과 model2의 policy에 따라
+# # 어떻게 플레이 하는지를 직접 확인가능
+# def simulate_model(model1, model2):
+#     eps1 = model1.eps
+#     model1.eps = 0  # no exploration
+#     players = {1:model1, 2:model2}
 
-    test_env = ConnectFourEnv()
+#     test_env = ConnectFourEnv()
 
-    test_env.reset()
-    while not test_env.done:
-        turn = test_env.player
-        state_ = board_normalization(noise=False, env=test_env, use_conv=players[turn].use_conv)
-        state = torch.from_numpy(state_).float()
+#     test_env.reset()
+#     while not test_env.done:
+#         turn = test_env.player
+#         state_ = board_normalization(noise=False, env=test_env, use_conv=players[turn].use_conv)
+#         state = torch.from_numpy(state_).float()
 
-        action = players[turn].select_action(state, valid_actions=test_env.valid_actions, player=turn)
-        test_env.step(action)
-        test_env.print_board(clear_board=False)
-        print("{}p put piece on {}".format(turn, action))
-        time.sleep(1)   
-    print("winner is {}p".format(test_env.win))
+#         action = players[turn].select_action(state, test_env, player=turn)
+#         test_env.step(action)
+#         test_env.print_board(clear_board=False)
+#         print("{}p put piece on {}".format(turn, action))
+#         time.sleep(1)   
+#     print("winner is {}p".format(test_env.win))
 
-    model1.eps = eps1  # restore exploration
+#     model1.eps = eps1  # restore exploration
 
 def get_current_time():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -142,7 +142,7 @@ if mode == '1':
             time.sleep(1)
             state_ = env.board_normalization(False,CFenv, Qagent.policy_net.model_type)
             state = torch.from_numpy(state_).float()
-            action = Qagent.select_action(state, valid_actions=CFenv.valid_actions, player=CFenv.player)
+            action = Qagent.select_action(state, CFenv, player=CFenv.player)
             if isinstance(action, tuple):
                 action = action[0]
             CFenv.step(action)

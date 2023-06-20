@@ -61,7 +61,7 @@ state = torch.from_numpy(state_).float()
 print(state)
 
 # agent의 action 선택, 인자엔 state와 가능한 액션, 현재 플레이어를 넣어줌 
-action = SL_agent.select_action(state=state, valid_actions=VEnv.valid_actions, player= VEnv.player)
+action = SL_agent.select_action(state=state, env=VEnv, player= VEnv.player)
 
 # minimax-DQN을 사용할 경우 (내 액션, 상대 예상 액션) 으로 리턴하기 때문에 앞에 하나만 필요함
 if SL_agent.use_minimax: 
