@@ -55,7 +55,9 @@ def board_normalization(noise,env, model_type):
 def compare_model(model1, model2, n_battle=10):
     # epsilon을 복원하지 않으면, 학습 내내 고정됨 
     eps1 = model1.eps
+    temp = model1.temp
     model1.eps = 0  # no exploration
+    model1.temp = 0.5
     players = {1:model1, 2:model2}
     records = [0,0,0]  # model1 win, model2 win, draw
     comp_env = ConnectFourEnv()
@@ -79,7 +81,7 @@ def compare_model(model1, model2, n_battle=10):
         else: records[2] += 1
 
     model1.eps = eps1  # restore exploration
-
+    model1.temp = temp
     return records
 
 # model1과 model2의 policy에 따라

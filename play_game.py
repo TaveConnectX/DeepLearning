@@ -51,7 +51,7 @@ def print_board_while_gaming(env, pointer, board=None):
 
 
 
-CF = env.ConnectFourEnv(first_player=2)
+CF = env.ConnectFourEnv()
 mode = input("to play with human, type 'human'(else just enter):")
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

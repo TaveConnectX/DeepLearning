@@ -56,6 +56,17 @@ def set_op_agent(agent_name):
         print("invalid op_agent model name")
         exit()
 
+def evaluate_model(agent, record):
+    op_agents = [ConnectFourRandomAgent(), HeuristicAgent(), MinimaxAgent()]
+    
+    
+    w,l,d = env.compare_model(agent, op_agents[0], n_battle=33)
+    record[0].append(w+d)
+    w,l,d = env.compare_model(agent, op_agents[1], n_battle=33)
+    record[1].append(w+d)
+    w,l,d = env.compare_model(agent, op_agents[2], n_battle=34)
+    record[2].append(w+d)
+    
 
 
 class ConnectFourDQNAgent(nn.Module):
@@ -121,6 +132,8 @@ class ConnectFourDQNAgent(nn.Module):
         self.batch_size = config['batch_size']  # size of mini-batch
         self.repeat_reward = config['repeat_reward']  # repeat reward
         self.losses = []  # loss들을 담는 list 
+        # record of win rate of random, heuristic, minimax agent
+        self.record = [[], [], []]  
 
 
     def select_action(self, state, env, player=1):
@@ -208,9 +221,10 @@ class ConnectFourDQNAgent(nn.Module):
                 env.print_board(clear_board=False)
                 print("epi:",i, ", agent's step:",self.steps)
                 # 얼마나 학습이 진행되었는지 확인하기 위해, 모델 성능 측정 
-                record = compare_model(self, op_model, n_battle=100)
-                print(record)
-                print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
+                evaluate_model(self, record=self.record)
+                
+                print(self.record[0][-1],self.record[1][-1], self.record[2][-1])
+                # print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
                 print("loss:",sum(self.losses[-101:-1])/100.)
                 if self.eps > self.softmax_const: print("epsilon:",self.eps)
                 else: print("temp:",self.temp)
@@ -671,6 +685,7 @@ class MinimaxDQNAgent(nn.Module):
                 env.print_board(clear_board=False)
                 print("epi:",i, ", agent's step:",self.steps)
                 # 얼마나 학습이 진행되었는지 확인하기 위해, 모델 성능 측정 
+                
                 record = compare_model(self, op_model, n_battle=100)
                 print(record)
                 print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
@@ -1150,26 +1165,35 @@ class ConnectFourRandomAgent(nn.Module) :
 
 
 
-# agent that moves from minimax tree policy       
+# https://github.com/smorga41/Connect-4-MiniMax-Ai/blob/main/Connect%204%20AI/Connect4_Ai.py
+# evaluation을 위해 사용할 minimax agent, 위의 링크에서 조금 수정 
 class MinimaxAgent():
-    def __init__(self, depth=6):
+    def __init__(self, depth=4):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.policy_net = MinimaxModel()
         self.use_conv = True
         self.use_resnet = False
         self.use_minimax = False
 
-        self.tree = Tree()
         self.depth = depth
 
+        self.win_score = 10000000
+        self.lose_score = -10000000
 
-    # normalize 된 board를 다시 1과 2로 바꿔줌
-    def arr2board(self, state):
-        state_ = copy.deepcopy(np.array(state.reshape(6,7)))
-        state_ = np.round(state_).astype(int)
-        state_[state_==-1] = 2
+        self.four_score = 10000
+        self.three_score = 10
+        self.two_score = 3
+        self.middle_column = 2
+        self.aging_penalty = 3
 
-        return state_
+
+        # 일단 op_four_score은 안쓸 예정 
+        self.op_four_score = -10000000
+        self.op_three_score = -12
+        self.op_two_score = -4
+
+
+    
     
     # 현재 보드 상태에서 이긴 플레이어가 있는지 확인
     def is_winner(self, board, player):
@@ -1200,58 +1224,117 @@ class MinimaxAgent():
 
         return False
     
-    # Minimax 알고리즘
-    def minimax(self, board, depth, alpha, beta, maximizingPlayer, player):
-        valid_moves = get_valid_actions(board)
+   
+    
+    
 
-        # 재귀 종료 조건
-        if depth == 0 or len(valid_moves) == 0 or self.is_winner(board, 1) or self.is_winner(board, 2):
-            if self.is_winner(board, player):
-                return (None, 100000000000000)
-            elif self.is_winner(board, 2//player):
-                return (None, -100000000000000)
-            else:
-                return (None, 0)
+    def score_position(self, board, player):
+        score = 0
+        rows, cols = board.shape
+        ## Score center column
+        center_array = [int(i) for i in list(board[cols//2,:])]
+        center_count = center_array.count(player)
+        score += center_count * 2
+
+        ## Score Horizontal
+        for r in range(rows):
+            row_array = [int(i) for i in list(board[r,:])]
+            for c in range(cols-3):
+                window = row_array[c:c+4]
+                score += self.evaluate_window(window, player)
+
+        ## Score Vertical
+        for c in range(cols):
+            # print(board)
+            # print(board[c,:])
+            col_array = [int(i) for i in list(board[:,c])]
+            for r in range(rows-3):
+                window = col_array[r:r+4]
+                score += self.evaluate_window(window, player)
+
+        ## Score postive sloped diagonal
+        for r in range(rows-3):
+            for c in range(cols-3):
+                window = [board[r+i][c+i] for i in range(4)]
+                score += self.evaluate_window(window, player)
+
+        for r in range(rows-3):
+            for c in range(cols-3):
+                window = [board[r+3-i][c+i] for i in range(4)]
+                score += self.evaluate_window(window, player)
+
+        return score
+
+
+    def evaluate_window(self, window, player):
+        score = 0
+        op_player = 2//player
+
+        if window.count(player) == 4:
+            score += self.four_score
+            return score
+        elif window.count(player) == 3 and window.count(0) == 1:
+            score += self.three_score
+        elif window.count(player) == 2 and window.count(0) == 2:
+            score += self.two_score
+
+        if window.count(op_player) == 4:
+            score += self.op_four_score
+            return score
+        elif window.count(op_player) == 3 and window.count(0) == 1:
+            score += self.op_three_score
+        elif window.count(op_player) == 2 and window.count(0) == 2:
+            score += self.op_two_score
+        return score
+
+    def minimax(self, board, depth, alpha, beta, maximizingPlayer, player):
+        valid_actions = get_valid_actions(board)
+
+        
+        if self.is_winner(board, 2):
+            score = self.win_score + depth*self.aging_penalty
+            return (None, score)
+        elif self.is_winner(board, 1):
+            score = self.lose_score - depth*self.aging_penalty
+            return (None, score)
+        elif not valid_actions: return (None, 0)
+        elif depth == 0:
+            return (None, self.score_position(board, player))
+
 
         if maximizingPlayer:
             value = -np.Inf
-            best_move = np.random.choice(valid_moves)
-            for col in valid_moves:
-                temp_board = board.copy()
-                temp_board = get_next_board(temp_board, col, player)
-                # print(temp_board)
-                new_score = self.minimax(temp_board, depth - 1, alpha, beta, False, 2//player)[1]
+            action = random.choice(valid_actions)
+            for col in valid_actions:
+                new_board = np.copy(board)
+                new_board = get_next_board(new_board, col, player)
+                new_score = self.minimax(new_board, depth-1, alpha, beta, False, 2//player)[1]
                 if new_score > value:
                     value = new_score
-                    best_move = col
+                    action = col
+
                 alpha = max(alpha, value)
                 if alpha >= beta:
                     break
-                # if value==0: best_move = np.random.choice(valid_moves)
-            return best_move, value
+
+            return (action, value)
+        
         else:
             value = np.Inf
-            best_move = np.random.choice(valid_moves)
-            for col in valid_moves:
-                temp_board = board.copy()
-                temp_board = get_next_board(temp_board, col, player)
-                # print(temp_board)
-                new_score = self.minimax(temp_board, depth - 1, alpha, beta, True, 2//player)[1]
+            action = random.choice(valid_actions)
+            for col in valid_actions:
+                new_board = np.copy(board)
+                new_board = get_next_board(new_board, col, player)
+                new_score = self.minimax(new_board, depth-1, alpha, beta, True, 2//player)[1]
                 if new_score < value:
                     value = new_score
-                    best_move = col
+                    action = col
+
                 beta = min(beta, value)
                 if alpha >= beta:
                     break
-            return best_move, value
 
-    def put_piece(self, board, col, player):
-        next_board = copy.deepcopy(board)
-        for r in range(5, -1, -1):
-            if next_board[r][col] == 0:
-                next_board[r][col] = player
-                break
-        return next_board
+            return (action, value)
 
     
     # 최적의 수(column) 반환
@@ -1261,9 +1344,9 @@ class MinimaxAgent():
         move, value = self.minimax(
             board,\
             depth, \
-            alpha=-np.Inf,\
-            beta=np.Inf, \
             maximizingPlayer=True, \
+            alpha=-np.Inf, \
+            beta=np.Inf, \
             player=player
         )
         # if value == 0:

@@ -9,7 +9,7 @@ from collections import deque
 import time
 import matplotlib.pyplot as plt
 import os
-from functions import get_model_config, save_model, compare_model, \
+from functions import get_model_config, save_model, \
                         get_current_time, get_model_and_config_name, load_model
 from agent_structure import ConnectFourDQNAgent, HeuristicAgent, set_op_agent
 
@@ -69,7 +69,7 @@ Qagent.train(epi=config['epi'], env=CFenv, op_model=Qagent2)
 
 # 여긴 나중에 evaluation으로 바꿔보자 
 if Qagent2 is None: Qagent2 = env.HeuristicAgent()
-record = compare_model(Qagent, Qagent2, n_battle=100)
+record = env.compare_model(Qagent, Qagent2, n_battle=100)
 print(record)
 print("win rate of Qagent: {}%".format(record[0]))
 
@@ -110,6 +110,12 @@ with open('model/model_{}/model_config_{}.json'.format(num,num), 'w') as f:
 
 plt.plot(Qagent.losses)
 plt.savefig('model/model_{}/loss_{}.png'.format(num,num))
+plt.show()
+
+for i in range(3):
+    if i==2: plt.plot(Qagent.record[i]/34*100)
+    else: plt.plot(Qagent.record[i]/33*100)
+plt.savefig('model/model_{}/win_rate_{}.png'.format(num,num))
 plt.show()
 
 save_model(Qagent.policy_net, folder_num=num)
