@@ -1,5 +1,5 @@
 {
-    "epi":401,
+    "epi":10001,
     "lr":0.0001,
     "gamma":0.99, 
     "batch_size":128, 
@@ -11,7 +11,7 @@
     "noise_while_train":false,
 
     "eps":1,
-    "softmax_const":1,
+    "softmax_const":0,
     "max_temp":2,
     "min_temp":0.1,
 
@@ -23,5 +23,6 @@
 
     "use_conv":true,
     "use_resnet":true,
-    "use_minimax":true
+    "use_minimax":true,
+    "next_state_is_op_state":false
 }

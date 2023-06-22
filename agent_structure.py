@@ -81,7 +81,10 @@ class ConnectFourDQNAgent(nn.Module):
         self.use_conv=config['use_conv']
         self.use_resnet=config['use_resnet']
         self.use_minimax=config['use_minimax']
-
+        self.next_state_is_op_state = config['next_state_is_op_state']
+        if self.use_minimax and self.next_state_is_op_state:
+            print("invalid model structure")
+            exit()
         self.policy_net = DQNModel(use_conv=self.use_conv,
                                    use_resnet=self.use_resnet,
                                    use_minimax=self.use_minimax
@@ -122,7 +125,7 @@ class ConnectFourDQNAgent(nn.Module):
         self.steps = 0
 
         self.epi = config['epi']
-        self.softmax_const = config['softmax_const']
+        self.softmax_const = config['softmax_const'] + np.finfo(np.float32).min
         self.max_temp = config['max_temp']
         self.min_temp = config['min_temp']
         self.temp_decay = (self.min_temp/self.max_temp)**(1/(self.epi*self.softmax_const))
@@ -284,6 +287,9 @@ class ConnectFourDQNAgent(nn.Module):
                             if turn==2:
                                 if self.use_minimax:
                                     self.memory.add(past_state, past_action, action, past_reward, op_state, past_done)
+                                elif self.next_state_is_op_state:
+                                    
+                                    self.memory.add(past_state, past_action,-reward, state*-1, done)
                                 else:
                                     self.memory.add(past_state, past_action, -reward, op_state, done)
                                 # print for debugging
@@ -299,6 +305,8 @@ class ConnectFourDQNAgent(nn.Module):
                     elif turn==2:  # 내 경험만 수집한다
                         if self.use_minimax:
                             self.memory.add(past_state, past_action, action, past_reward, op_state, past_done)
+                        elif self.next_state_is_op_state:
+                            self.memory.add(past_state, past_action, past_reward, state*-1,past_done)
                         else:
                             self.memory.add(past_state, past_action, past_reward, op_state, past_done)
                         # print for debugging
@@ -522,6 +530,8 @@ class ConnectFourDQNAgent(nn.Module):
         if self.use_minimax:
             Q2 = Q2.reshape(-1,7,7)
             Y = r_batch + self.gamma * ((1-d_batch) * torch.max(torch.min(Q2, dim=2)[0], dim=1)[0])
+        elif self.next_state_is_op_state:
+            Y = r_batch + self.gamma * -1 * ((1-d_batch) * torch.max(Q2,dim=1)[0])
         else:
             Y = r_batch + self.gamma * ((1-d_batch) * torch.max(Q2,dim=1)[0])
         
