@@ -133,6 +133,9 @@ class ConnectFourDQNAgent(nn.Module):
         self.eps = config['eps']  # DQN에서 사용될 epsilon
         self.noise_while_train = config['noise_while_train']
         
+        self.double_dqn = config['double_dqn']
+
+
         self.batch_size = config['batch_size']  # size of mini-batch
         self.repeat_reward = config['repeat_reward']  # repeat reward
         self.losses = []  # loss들을 담는 list 
@@ -258,6 +261,23 @@ class ConnectFourDQNAgent(nn.Module):
                     action = action[0]
                 
                 observation, reward, done = env.step(action)
+                if self.use_minimax:
+                    mask = torch.zeros(7,7)
+                    VA = get_valid_actions(observation)
+                    DA = get_distinct_actions(env)
+                    for va in VA:
+                        mask[va,:] = 1
+                        mask[:,va] = 1
+                    for da in DA:
+                        mask[da,da] = 0
+                else:
+                    mask = torch.zeros(7)
+                    VA = get_valid_actions(observation)
+                    for va in VA:
+                        mask[va] = 1
+
+                    
+                        
                 op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
                 op_state = torch.from_numpy(op_state_).float() 
 
@@ -272,9 +292,9 @@ class ConnectFourDQNAgent(nn.Module):
                             
                             if turn==1:
                                 if self.use_minimax:
-                                    self.memory.add(state, action, op_action_prediction, reward, op_state*-1, done)
+                                    self.memory.add(state, action, op_action_prediction, reward, op_state*-1,mask,done)
                                 else:
-                                    self.memory.add(state,action, reward, op_state*-1, done)
+                                    self.memory.add(state,action, reward, op_state*-1, mask,done)
                                 # print for debugging
                                 # print("for player")
                                 # print("state:\n",torch.round(state).reshape(6,7).int())
@@ -286,12 +306,12 @@ class ConnectFourDQNAgent(nn.Module):
                             #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
                             if turn==2:
                                 if self.use_minimax:
-                                    self.memory.add(past_state, past_action, action, past_reward, op_state, past_done)
+                                    self.memory.add(past_state, past_action, action, past_reward, op_state, mask,past_done)
                                 elif self.next_state_is_op_state:
                                     
-                                    self.memory.add(past_state, past_action,-reward, state*-1, done)
+                                    self.memory.add(past_state, past_action,-reward, state*-1,mask, done)
                                 else:
-                                    self.memory.add(past_state, past_action, -reward, op_state, done)
+                                    self.memory.add(past_state, past_action, -reward, op_state, mask,done)
                                 # print for debugging
                                 # print("for opponent")
                                 # print("state:\n",torch.round(past_state).reshape(6,7).int())
@@ -304,11 +324,11 @@ class ConnectFourDQNAgent(nn.Module):
                     # 경기가 끝나지 않았다면
                     elif turn==2:  # 내 경험만 수집한다
                         if self.use_minimax:
-                            self.memory.add(past_state, past_action, action, past_reward, op_state, past_done)
+                            self.memory.add(past_state, past_action, action, past_reward, op_state, mask,past_done)
                         elif self.next_state_is_op_state:
-                            self.memory.add(past_state, past_action, past_reward, state*-1,past_done)
+                            self.memory.add(past_state, past_action, past_reward, state*-1,mask,past_done)
                         else:
-                            self.memory.add(past_state, past_action, past_reward, op_state, past_done)
+                            self.memory.add(past_state, past_action, past_reward, op_state, mask,past_done)
                         # print for debugging
                         # print("for opponent")
                         # print("state:\n",torch.round(past_state).reshape(6,7).int())
@@ -519,21 +539,28 @@ class ConnectFourDQNAgent(nn.Module):
         # reward_batch = torch.Tensor([r for (s1,a,r,s2,d) in minibatch]).to(self.device)
         # done_batch = torch.Tensor([d for (s1,a,r,s2,d) in minibatch]).to(self.device)
         
-        s_batch, a_batch, r_batch, s_prime_batch, d_batch = self.memory.sample()
+        s_batch, a_batch, r_batch, s_prime_batch, m_batch, d_batch = self.memory.sample()
 
+        
+        
         # print("state1_batch:",state1_batch.shape)
         Q1 = self.policy_net(s_batch)  # (256,7)
         with torch.no_grad():
             Q2 = self.target_net(s_prime_batch)
 
+        NSIOP = -1 if self.next_state_is_op_state else 1
         # target Q value들 
+        
         if self.use_minimax:
-            Q2 = Q2.reshape(-1,7,7)
+            Q2 = Q2.reshape(-1,7,7) * m_batch
             Y = r_batch + self.gamma * ((1-d_batch) * torch.max(torch.min(Q2, dim=2)[0], dim=1)[0])
-        elif self.next_state_is_op_state:
-            Y = r_batch + self.gamma * -1 * ((1-d_batch) * torch.max(Q2,dim=1)[0])
+        elif self.double_dqn:
+            mask_q = self.policy_net(s_prime_batch) * m_batch
+            Q2 = Q2.gather(1, mask_q.argmax(dim=1).unsqueeze(dim=1)).squeeze()
+            Y = r_batch + self.gamma * NSIOP*((1-d_batch)* Q2)
         else:
-            Y = r_batch + self.gamma * ((1-d_batch) * torch.max(Q2,dim=1)[0])
+            Q2 *= m_batch
+            Y = r_batch + self.gamma * NSIOP*((1-d_batch) * torch.max(Q2,dim=1)[0])
         
         # 해당하는 action을 취한 q value들
         X = Q1.gather(dim=1,index=a_batch.long().unsqueeze(dim=1)).squeeze()
