@@ -56,15 +56,15 @@ def set_op_agent(agent_name):
         print("invalid op_agent model name")
         exit()
 
-def evaluate_model(agent, record):
+def evaluate_model(agent, record, n_battles=[10,10,10]):
     op_agents = [ConnectFourRandomAgent(), HeuristicAgent(), MinimaxAgent()]
     
     
-    w,l,d = env.compare_model(agent, op_agents[0], n_battle=33)
+    w,l,d = env.compare_model(agent, op_agents[0], n_battle=n_battles[0])
     record[0].append(w+d)
-    w,l,d = env.compare_model(agent, op_agents[1], n_battle=33)
+    w,l,d = env.compare_model(agent, op_agents[1], n_battle=n_battles[1])
     record[1].append(w+d)
-    w,l,d = env.compare_model(agent, op_agents[2], n_battle=34)
+    w,l,d = env.compare_model(agent, op_agents[2], n_battle=n_battles[2])
     record[2].append(w+d)
     
 
@@ -128,6 +128,7 @@ class ConnectFourDQNAgent(nn.Module):
         self.temp_decay = (self.min_temp/self.max_temp)**(1/(self.epi*self.softmax_const))
         self.temp = self.max_temp
         self.eps = config['eps']  # DQN에서 사용될 epsilon
+        self.noise_while_train = config['noise_while_train']
         
         self.batch_size = config['batch_size']  # size of mini-batch
         self.repeat_reward = config['repeat_reward']  # repeat reward
@@ -209,15 +210,17 @@ class ConnectFourDQNAgent(nn.Module):
 
         if self.selfplay:
             players = {1: self}
-            pool = [ConnectFourRandomAgent()]
+            pool = deque([ConnectFourRandomAgent()], maxlen=100)
         # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
         else: players = {1: self, 2: op_model}
 
         for i in range(epi):
-
-            if self.selfplay: players[2] = random.choice(pool)
+            
+            if self.selfplay: 
+                random.shuffle(pool)
+                players[2] = random.choice(pool)
             # 100번마다 loss, eps 등의 정보 표시
-            if i!=0 and i%100==0: 
+            if i!=0 and i%200==0: 
                 env.print_board(clear_board=False)
                 print("epi:",i, ", agent's step:",self.steps)
                 # 얼마나 학습이 진행되었는지 확인하기 위해, 모델 성능 측정 
@@ -234,7 +237,7 @@ class ConnectFourDQNAgent(nn.Module):
             
             env.reset()
 
-            state_ = board_normalization(noise=True, env=env, use_conv=players[env.player].use_conv)
+            state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
             state = torch.from_numpy(state_).float()
             done = False
 
@@ -252,7 +255,7 @@ class ConnectFourDQNAgent(nn.Module):
                     action = action[0]
                 
                 observation, reward, done = env.step(action)
-                op_state_ = board_normalization(noise=True, env=env, use_conv=players[turn].use_conv)
+                op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
                 op_state = torch.from_numpy(op_state_).float() 
 
                 if past_action is not None:  # 맨 처음이 아닐 때 
@@ -335,7 +338,7 @@ class ConnectFourDQNAgent(nn.Module):
                     new_model.policy_net.eval()
                     new_model.target_net.eval()
                     new_model.eps = 0
-                    new_model.temp = 0.1
+                    new_model.temp = 0.3
                     pool.append(new_model)
                 # if Qagent.memory and abs(Qagent.memory[-1][2])!=1:
                 #     print("state:\n",torch.round(Qagent.memory[-1][0]).int())
@@ -379,7 +382,7 @@ class ConnectFourDQNAgent(nn.Module):
             
             env.reset()
 
-            state_ = board_normalization(noise=True, env=env, use_conv=players[env.player].use_conv)
+            state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
             state = torch.from_numpy(state_).float()
             done = False
 
@@ -398,7 +401,7 @@ class ConnectFourDQNAgent(nn.Module):
 
 
                 observation, reward, done = env.step(action)
-                op_state_ = board_normalization(noise=True, env=env, use_conv=players[turn].use_conv)
+                op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
                 op_state = torch.from_numpy(op_state_).float() 
 
                 if past_action is not None:  # 맨 처음이 아닐 때 
@@ -697,7 +700,7 @@ class MinimaxDQNAgent(nn.Module):
             
             env.reset()
 
-            state_ = board_normalization(noise=True, env=env, model_type=players[env.player].policy_net.model_type)
+            state_ = board_normalization(noise=self.noise_while_train, env=env, model_type=players[env.player].policy_net.model_type)
             state = torch.from_numpy(state_).float()
             done = False
 
@@ -716,7 +719,7 @@ class MinimaxDQNAgent(nn.Module):
                    
                 
                 observation, reward, done = env.step(action)
-                op_state_ = board_normalization(noise=True, env=env, model_type=players[turn].policy_net.model_type)
+                op_state_ = board_normalization(noise=self.noise_while_train, env=env, model_type=players[turn].policy_net.model_type)
                 op_state = torch.from_numpy(op_state_).float() 
 
                 if past_action is not None:  # 맨 처음이 아닐 때 
@@ -823,7 +826,7 @@ class MinimaxDQNAgent(nn.Module):
             
             env.reset()
 
-            state_ = board_normalization(noise=True, env=env, model_type=players[env.player].policy_net.model_type)
+            state_ = board_normalization(noise=self.noise_while_train, env=env, model_type=players[env.player].policy_net.model_type)
             state = torch.from_numpy(state_).float()
             done = False
 
@@ -841,7 +844,7 @@ class MinimaxDQNAgent(nn.Module):
                     action = action[0]
 
                 observation, reward, done = env.step(action)
-                op_state_ = board_normalization(noise=True, env=env, model_type=players[turn].policy_net.model_type)
+                op_state_ = board_normalization(noise=self.noise_while_train, env=env, model_type=players[turn].policy_net.model_type)
                 op_state = torch.from_numpy(op_state_).float() 
 
                 if past_action is not None:  # 맨 처음이 아닐 때 

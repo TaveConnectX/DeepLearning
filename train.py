@@ -113,8 +113,7 @@ plt.savefig('model/model_{}/loss_{}.png'.format(num,num))
 plt.show()
 
 for i in range(3):
-    if i==2: plt.plot(Qagent.record[i]/34*100)
-    else: plt.plot(Qagent.record[i]/33*100)
+    plt.plot(Qagent.record[i])
 plt.savefig('model/model_{}/win_rate_{}.png'.format(num,num))
 plt.show()
 
