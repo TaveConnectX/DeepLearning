@@ -557,7 +557,19 @@ class ConnectFourDQNAgent(nn.Module):
         # target Q value들 
         
 
-        if self.use_minimax:
+        if self.use_minimax and self.double_dqn:
+            mask_q = self.policy_net(s_prime_batch).reshape(-1,7,7) * m_batch
+            mask_q[mask_q==0] = float('inf')
+            op_qs, op_idxs = torch.min(mask_q, dim=2)
+            op_qs = torch.nan_to_num(op_qs, posinf=float('-inf'))
+            qs, idxs = torch.max(op_qs, dim=1)
+            op_idxs = torch.gather(op_idxs ,1, idxs.reshape(-1,1)).squeeze()
+            acts = idxs*7 + op_idxs
+            Q2 = Q2.gather(1, acts.unsqueeze(dim=1)).squeeze()
+            Y = r_batch + self.gamma * ((1-d_batch) * Q2)
+
+            pass
+        elif self.use_minimax:
             mask_q = Q2.reshape(-1,7,7) * m_batch
             mask_q[mask_q==0] = float('inf')
             op_qs = torch.amin(mask_q, dim=2)
