@@ -114,11 +114,13 @@ def get_minimax_action(q_value,valid_actions, distinct_actions, temp=0):
             # print(q_value[idx])
             # print(q_dict[a][1])
             q_dict[a].append((b, -q_value[idx]))
+        
         op_action, value = softmax_policy(torch.tensor(q_dict[a]), temp=temp)
         q_dict[a] = (op_action, -1 * value)
 
     qs_my_turn = [[key, value[1]] for key, value in q_dict.items()]
     action, value = softmax_policy(torch.tensor(qs_my_turn), temp=temp)
+    
 
 
     return (action, q_dict[action][0])

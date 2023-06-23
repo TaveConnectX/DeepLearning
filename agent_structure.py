@@ -151,7 +151,7 @@ class ConnectFourDQNAgent(nn.Module):
             distinct_actions = get_distinct_actions(env)
             
             if is_full_after_my_turn(valid_actions, distinct_actions):
-                return (valid_actions[0], np.random.choice(range(self.action_size)))
+                return (valid_actions[0], np.random.choice(valid_actions))
             if np.max([np.random.uniform(), self.softmax_const]) < self.eps:
                 return (np.random.choice(valid_actions), np.random.choice(valid_actions))
             
@@ -171,7 +171,7 @@ class ConnectFourDQNAgent(nn.Module):
             q_value = self.policy_net(state_)
 
             # temp=0 은 greedy action을 의미하므로
-            temp = 0 if self.temp < self.eps else self.temp
+            temp = 0 if self.softmax_const < self.eps else self.temp
 
             if self.use_minimax:
                 # print("state:",state)
@@ -184,6 +184,12 @@ class ConnectFourDQNAgent(nn.Module):
                     distinct_actions,
                     temp=temp
                 )
+                # for debugging
+                # print(q_value.reshape(7,7))
+                # print(valid_actions)
+                # print(distinct_actions)
+                # print(temp)
+                # print(a,b)
                 return (a, b)
             
             else:
@@ -267,14 +273,21 @@ class ConnectFourDQNAgent(nn.Module):
                 
                 observation, reward, done = env.step(action)
                 if self.use_minimax:
-                    mask = torch.zeros(7,7)
+                    mask = torch.ones(7,7)
                     VA = get_valid_actions(observation)
                     DA = get_distinct_actions(env)
-                    for va in VA:
-                        mask[va,:] = 1
-                        mask[:,va] = 1
+                    for a in range(7):
+                        if not a in VA:
+                            mask[a,:] = 0
+                            mask[:,a] = 0
                     for da in DA:
                         mask[da,da] = 0
+                    # for debugging
+                    # print(observation)
+                    # print(VA)
+                    # print(DA)
+                    # print(mask)
+                    # print()
                 else:
                     mask = torch.zeros(7)
                     VA = get_valid_actions(observation)
@@ -305,13 +318,14 @@ class ConnectFourDQNAgent(nn.Module):
                                 # print("state:\n",torch.round(state).reshape(6,7).int())
                                 # print("action:",action)
                                 # print("reward:",reward)
-                                # print("next_state\n",torch.round(op_state*-1).reshape(6,7).int())
+                                # print("next_state:\n",torch.round(op_state*-1).reshape(6,7).int())
+                                # print("mask:\n",torch.round(mask).reshape(7,7))
                                 # print()
                             # 내가 이겼으므로 상대는 음의 보상을 받음 
                             #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
                             if turn==2:
                                 if self.use_minimax:
-                                    self.memory.add(past_state, past_action, action, past_reward, op_state, mask,past_done)
+                                    self.memory.add(past_state, past_action, action, -reward, op_state, mask,done)
                                 elif self.next_state_is_op_state:
                                     
                                     self.memory.add(past_state, past_action,-reward, state*-1,mask, done)
@@ -323,6 +337,7 @@ class ConnectFourDQNAgent(nn.Module):
                                 # print("action:",past_action)
                                 # print("reward:",-reward)
                                 # print("next_state\n",torch.round(op_state).reshape(6,7).int())
+                                # print("mask\n",mask.reshape(7,7))
                                 # print()
 
 
@@ -340,6 +355,7 @@ class ConnectFourDQNAgent(nn.Module):
                         # print("action:",past_action)
                         # print("reward:",past_reward)
                         # print("next_state\n",torch.round(op_state).reshape(6,7).int())
+                        # print("mask\n",mask.reshape(7,7))
                         # print()
 
                 
@@ -370,7 +386,7 @@ class ConnectFourDQNAgent(nn.Module):
                     new_model = copy.deepcopy(self)
                     new_model.policy_net.eval()
                     new_model.target_net.eval()
-                    new_model.eps = 0
+                    new_model.eps = 0.1
                     new_model.temp = 0.3
                     pool.append(new_model)
                 # if Qagent.memory and abs(Qagent.memory[-1][2])!=1:
@@ -390,133 +406,133 @@ class ConnectFourDQNAgent(nn.Module):
                 self.temp *= self.temp_decay
 
 
-    def train_selfplay(self, epi, env, pool, add_pool):
-        env.reset()
+    # def train_selfplay(self, epi, env, pool, add_pool):
+    #     env.reset()
 
-        # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
-        players = {1: self}
+    #     # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
+    #     players = {1: self}
 
-        for i in range(epi):
+    #     for i in range(epi):
 
-            players[2] = random.choice(pool)
-            # 100번마다 loss, eps 등의 정보 표시
-            if i!=0 and i%100==0: 
-                env.print_board(clear_board=False)
-                print("epi:",i, ", agent's step:",self.steps)
-                # 얼마나 학습이 진행되었는지 확인하기 위해, 모델 성능 측정 
-                record = compare_model(self, players[2], n_battle=100)
-                print(record)
-                print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
-                print("loss:",sum(self.losses[-101:-1])/100.)
-                print("epsilon:",self.eps)
-                # simulate_model() 을 실행시키면 직접 행동 관찰 가능
-                # simulate_model(self, op_model)
+    #         players[2] = random.choice(pool)
+    #         # 100번마다 loss, eps 등의 정보 표시
+    #         if i!=0 and i%100==0: 
+    #             env.print_board(clear_board=False)
+    #             print("epi:",i, ", agent's step:",self.steps)
+    #             # 얼마나 학습이 진행되었는지 확인하기 위해, 모델 성능 측정 
+    #             record = compare_model(self, players[2], n_battle=100)
+    #             print(record)
+    #             print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
+    #             print("loss:",sum(self.losses[-101:-1])/100.)
+    #             print("epsilon:",self.eps)
+    #             # simulate_model() 을 실행시키면 직접 행동 관찰 가능
+    #             # simulate_model(self, op_model)
 
             
-            env.reset()
+    #         env.reset()
 
-            state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
-            state = torch.from_numpy(state_).float()
-            done = False
+    #         state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
+    #         state = torch.from_numpy(state_).float()
+    #         done = False
 
-            past_state, past_action, past_reward, past_done = state, None, None, done
+    #         past_state, past_action, past_reward, past_done = state, None, None, done
             
-            while not done:
-                # 원래는 player, op_player 였지만, 직관적인 이해를 위해 수정 
-                turn = env.player
-                op_turn = 2//turn
+    #         while not done:
+    #             # 원래는 player, op_player 였지만, 직관적인 이해를 위해 수정 
+    #             turn = env.player
+    #             op_turn = 2//turn
                 
-                action = players[turn].select_action(state, env, player=turn)
-                if self.use_minimax:
-                    op_action_prediction = action[1]
-                    action = action[0]
+    #             action = players[turn].select_action(state, env, player=turn)
+    #             if self.use_minimax:
+    #                 op_action_prediction = action[1]
+    #                 action = action[0]
 
 
 
-                observation, reward, done = env.step(action)
-                op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
-                op_state = torch.from_numpy(op_state_).float() 
+    #             observation, reward, done = env.step(action)
+    #             op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
+    #             op_state = torch.from_numpy(op_state_).float() 
 
-                if past_action is not None:  # 맨 처음이 아닐 때 
-                    # 경기가 끝났을 때(중요한 경험)
-                    if done:
-                        repeat = 1
-                        # 중요한 경험일 때는 더 많이 memory에 추가해준다(optional)
-                        if reward > 0: repeat = self.repeat_reward
-                        for j in range(repeat):
-                            # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
-                            if turn==1:
-                                if self.use_minimax:
-                                    self.append_memory(state,action,op_action_prediction, reward, op_state*-1, done)
-                                else:
-                                    self.append_memory(state,action, reward, op_state*-1, done)
-                                # print for debugging
-                                # print("for player")
-                                # print("state:\n",torch.round(state).reshape(6,7).int())
-                                # print("action:",action)
-                                # print("reward:",reward)
-                                # print("next_state\n",torch.round(op_state*-1).reshape(6,7).int())
-                                # print()
-                            # 내가 이겼으므로 상대는 음의 보상을 받음 
-                            #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
-                            if turn==2:
-                                if self.use_minimax:
-                                    self.append_memory(past_state, past_action, action, -reward, op_state, done)
-                                else:
-                                    self.append_memory(past_state, past_action, -reward, op_state, done)
-                                # print for debugging
-                                # print("for opponent")
-                                # print("state:\n",torch.round(past_state).reshape(6,7).int())
-                                # print("action:",past_action)
-                                # print("reward:",-reward)
-                                # print("next_state\n",torch.round(op_state).reshape(6,7).int())
-                                # print()
-
-
-                    # 경기가 끝나지 않았다면
-                    elif turn==2:  # 내 경험만 수집한다
-                        if self.use_minimax:
-                            self.append_memory(past_state, past_action, action, past_reward, op_state, past_done)
-                        else:
-                            self.append_memory(past_state, past_action, past_reward, op_state, past_done)
-                        # print for debugging
-                        # print("for opponent")
-                        # print("state:\n",torch.round(past_state).reshape(6,7).int())
-                        # print("action:",past_action)
-                        # print("reward:",past_reward)
-                        # print("next_state\n",torch.round(op_state).reshape(6,7).int())
-                        # print()
+    #             if past_action is not None:  # 맨 처음이 아닐 때 
+    #                 # 경기가 끝났을 때(중요한 경험)
+    #                 if done:
+    #                     repeat = 1
+    #                     # 중요한 경험일 때는 더 많이 memory에 추가해준다(optional)
+    #                     if reward > 0: repeat = self.repeat_reward
+    #                     for j in range(repeat):
+    #                         # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
+    #                         if turn==1:
+    #                             if self.use_minimax:
+    #                                 self.append_memory(state,action,op_action_prediction, reward, op_state*-1, done)
+    #                             else:
+    #                                 self.append_memory(state,action, reward, op_state*-1, done)
+    #                             # print for debugging
+    #                             # print("for player")
+    #                             # print("state:\n",torch.round(state).reshape(6,7).int())
+    #                             # print("action:",action)
+    #                             # print("reward:",reward)
+    #                             # print("next_state\n",torch.round(op_state*-1).reshape(6,7).int())
+    #                             # print()
+    #                         # 내가 이겼으므로 상대는 음의 보상을 받음 
+    #                         #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
+    #                         if turn==2:
+    #                             if self.use_minimax:
+    #                                 self.append_memory(past_state, past_action, action, -reward, op_state, done)
+    #                             else:
+    #                                 self.append_memory(past_state, past_action, -reward, op_state, done)
+    #                             # print for debugging
+    #                             # print("for opponent")
+    #                             # print("state:\n",torch.round(past_state).reshape(6,7).int())
+    #                             # print("action:",past_action)
+    #                             # print("reward:",-reward)
+    #                             # print("next_state\n",torch.round(op_state).reshape(6,7).int())
+    #                             # print()
 
 
-                # info들 업데이트 해줌 
-                past_state = state
-                past_action = action
-                past_reward = reward
-                past_done = done
-                state = op_state
+    #                 # 경기가 끝나지 않았다면
+    #                 elif turn==2:  # 내 경험만 수집한다
+    #                     if self.use_minimax:
+    #                         self.append_memory(past_state, past_action, action, past_reward, op_state, past_done)
+    #                     else:
+    #                         self.append_memory(past_state, past_action, past_reward, op_state, past_done)
+    #                     # print for debugging
+    #                     # print("for opponent")
+    #                     # print("state:\n",torch.round(past_state).reshape(6,7).int())
+    #                     # print("action:",past_action)
+    #                     # print("reward:",past_reward)
+    #                     # print("next_state\n",torch.round(op_state).reshape(6,7).int())
+    #                     # print()
+
+
+    #             # info들 업데이트 해줌 
+    #             past_state = state
+    #             past_action = action
+    #             past_reward = reward
+    #             past_done = done
+    #             state = op_state
                 
-                # replay buffer 를 이용하여 mini-batch 학습
-                self.replay()
-                if self.steps%add_pool == 0:
-                    print("added in pool")
-                    new_model = copy.deepcopy(self)
-                    new_model.policy_net.eval()
-                    new_model.target_net.eval()
-                    new_model.eps = 0
-                    pool.append(new_model)
-                # if Qagent.memory and abs(Qagent.memory[-1][2])!=1:
-                #     print("state:\n",torch.round(Qagent.memory[-1][0]).int())
-                #     print("action:",Qagent.memory[-1][1])
-                #     print("reward:",Qagent.memory[-1][2])
-                #     print("next_state\n",torch.round(Qagent.memory[-1][3]).int())
+    #             # replay buffer 를 이용하여 mini-batch 학습
+    #             self.replay()
+    #             if self.steps%add_pool == 0:
+    #                 print("added in pool")
+    #                 new_model = copy.deepcopy(self)
+    #                 new_model.policy_net.eval()
+    #                 new_model.target_net.eval()
+    #                 new_model.eps = 0
+    #                 pool.append(new_model)
+    #             # if Qagent.memory and abs(Qagent.memory[-1][2])!=1:
+    #             #     print("state:\n",torch.round(Qagent.memory[-1][0]).int())
+    #             #     print("action:",Qagent.memory[-1][1])
+    #             #     print("reward:",Qagent.memory[-1][2])
+    #             #     print("next_state\n",torch.round(Qagent.memory[-1][3]).int())
                 
-                # 게임이 끝났다면 나가기 
-                if done: break
-            # print("eps:",Qagent.eps)
+    #             # 게임이 끝났다면 나가기 
+    #             if done: break
+    #         # print("eps:",Qagent.eps)
             
-            # epsilon-greedy
-            # min epsilon을 가지기 전까지 episode마다 조금씩 낮춰준다(1 -> 0.1)
-            if self.eps > 0.1: self.eps -= (1/epi)
+    #         # epsilon-greedy
+    #         # min epsilon을 가지기 전까지 episode마다 조금씩 낮춰준다(1 -> 0.1)
+    #         if self.eps > 0.1: self.eps -= (1/epi)
 
     # mini-batch로 업데이트 
     def replay(self):
@@ -568,7 +584,6 @@ class ConnectFourDQNAgent(nn.Module):
             Q2 = Q2.gather(1, acts.unsqueeze(dim=1)).squeeze()
             Y = r_batch + self.gamma * ((1-d_batch) * Q2)
 
-            pass
         elif self.use_minimax:
             mask_q = Q2.reshape(-1,7,7) * m_batch
             mask_q[mask_q==0] = float('inf')
