@@ -35,7 +35,7 @@ def save_model(model, filename='Model', folder_num=None):
 def load_model(model, filename='Model'):
     if not '.pth' in filename or not '.pt' in filename:
         filename += '.pth'
-    model.load_state_dict(torch.load(filename))
+    model.load_state_dict(torch.load(filename, map_location=torch.device('cpu')))
 
 # console 창을 비우는 함수 
 def clear():

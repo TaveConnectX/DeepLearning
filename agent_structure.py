@@ -66,8 +66,6 @@ def evaluate_model(agent, record):
     record[1].append(w+d)
     w,l,d = env.compare_model(agent, op_agents[2], n_battle=34)
     record[2].append(w+d)
-    
-
 
 class ConnectFourDQNAgent(nn.Module):
     def __init__(self, state_size=6*7, action_size=7, config_file_name=None, **kwargs):
