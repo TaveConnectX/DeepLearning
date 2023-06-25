@@ -110,8 +110,8 @@ VEnv = env.ConnectFourEnv()
 
 # 환경 초기화
 data = list()
-for i in range(0, 2000) :
-    if(i % 100 == 0) :
+for i in range(0, 5000) :
+    if(i % 200 == 0) :
         print("making_data : " + str(i))
     VEnv.reset()
 
@@ -180,8 +180,8 @@ for i in range(0, 2000) :
             break
 
 # 학습
-for i in range(0, 1600) :
-    if(i % 100 == 0) :
+for i in range(0, 4000) :
+    if(i % 500 == 0) :
         print("training : " + str(i))
     inputs = torch.FloatTensor(data[i][0])
     targets = torch.FloatTensor(data[i][1]).unsqueeze(0)  # 타겟에 차원을 추가합니다.
@@ -199,8 +199,8 @@ for i in range(0, 1600) :
 
 # 테스트
 count = 0
-for i in range(1600, len(data)) :
-    if(i % 100 == 0) :
+for i in range(4000, len(data)) :
+    if(i % 200 == 0) :
         print("test : " + str(i))
     inputs = torch.FloatTensor(data[i][0])
     outputs = model(inputs)
@@ -209,41 +209,14 @@ for i in range(1600, len(data)) :
     Predicted_label = predicted.item()
     #print("Predicted Label:", Predicted_label)
     if data[i][1] == [1,0,0] :
-        real_label = 1
-    elif data[i][1] == [0,1,0] :
         real_label = 0
+    elif data[i][1] == [0,1,0] :
+        real_label = 1
     elif data[i][1] == [0,0,1] :
         real_label = 2
     #print("real Label:", real_label)
     if (Predicted_label == real_label) :
         count += 1
-print("percent : " + str(count/400*100))
+print("percent : " + str(count/1000*100))
 
-    
-
-'''
-# 학습 데이터
-data = [
-    ([[[0, 1, 0, 1, 1, 0, 1],
-       [1, 0, 1, 0, 1, 0, 1],
-       [0, 1, 0, 1, 1, 0, 1],
-       [1, 0, 1, 0, 1, 0, 1],
-       [0, 1, 0, 1, 1, 0, 1],
-       [1, 0, 1, 0, 1, 0, 1]]], [1,0,0]), #win
-
-    ([[[1, 0, 1, 1, 0, 1, 0],
-       [0, 1, 0, 1, 0, 1, 0],
-       [1, 0, 1, 1, 0, 1, 0],
-       [0, 1, 0, 1, 0, 1, 0],
-       [1, 0, 1, 1, 0, 1, 0],
-       [0, 1, 0, 1, 0, 1, 0]]], [0,1,0]), #draw
-
-    ([[[1, 1, 1, 1, 1, 1, 1],
-       [0, 0, 0, 0, 0, 0, 0],
-       [1, 1, 1, 1, 1, 1, 1],
-       [0, 0, 0, 0, 0, 0, 0],
-       [1, 1, 1, 1, 1, 1, 1],
-       [0, 0, 0, 0, 0, 0, 0]]], [0,0,1]) #lose
-]
-print(type(data[0]))
-'''
+#percent : 65.5
