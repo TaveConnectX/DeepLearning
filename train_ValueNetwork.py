@@ -212,4 +212,4 @@ print("percent : " + str(count/40000*100))
 
 # percent : 65.5  (2만개) (학습 1.6만, 테스트 0.4만)
 # percent : 81.86 (10만개 (학습 8만, 테스트 2만))
-# percent :  (20만개 (학습 16만, 테스트 4만))
+# percent : 83.765 (20만개 (학습 16만, 테스트 4만)) "ValueNetwork.pth"
