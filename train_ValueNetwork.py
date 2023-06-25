@@ -146,7 +146,11 @@ for i in range(0, 2000) :
 
         # RL 에이전트 사용 여부 결정
         if turn == rl_start_turn:
+            important_state = state
             use_rl = True
+        
+        if (use_rl == False) :
+            important_state = state
 
         if done:
             if (reward == 0.0) :
@@ -155,15 +159,15 @@ for i in range(0, 2000) :
             if (VEnv.player == 2 and reward == 1) :
                 reward = -1
 
-            state = state.tolist()
-            for i in range(len(state)) :
-                for j in range(0, len(state[i])) :
-                    if state[i][j] == 2 :
-                        state[i][j] = -1
-                    state[i][j] = int(state[i][j])
+            important_state = important_state.tolist()
+            for i in range(len(important_state)) :
+                for j in range(0, len(important_state[i])) :
+                    if important_state[i][j] == 2 :
+                        important_state[i][j] = -1
+                    important_state[i][j] = int(important_state[i][j])
             tmp = list()
             tmp_forlist = list()
-            tmp_forlist.append(state)
+            tmp_forlist.append(important_state)
             tmp.append(tmp_forlist)
             if (reward == 1) :
                 tmp.append([1,0,0])
