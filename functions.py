@@ -116,11 +116,18 @@ def get_minimax_action(q_value,valid_actions, distinct_actions, temp=0):
             q_dict[a].append((b, -q_value[idx]))
         
         op_action, value = softmax_policy(torch.tensor(q_dict[a]), temp=temp)
+        # if torch.isnan(value):
+        #     print(a,b)
+        #     print(q_value.reshape(7,7))
+        #     print(q_dict)
         q_dict[a] = (op_action, -1 * value)
 
     qs_my_turn = [[key, value[1]] for key, value in q_dict.items()]
     action, value = softmax_policy(torch.tensor(qs_my_turn), temp=temp)
-    
+    # if torch.isnan(value):
+    #         print(a,b)
+    #         print(q_value.reshape(7,7))
+    #         print(q_dict)
 
 
     return (action, q_dict[action][0])
@@ -223,6 +230,16 @@ def get_model_and_config_name(folder_path):
 def softmax_policy(z, temp): 
     if not isinstance(z, torch.Tensor):
         z = torch.Tensor(z)
+
+    # temp=0 이면 greedy한 action 선택
+    if temp==0:
+        maxidx = z.argmax(dim=0)[1]
+        action, value = z[maxidx]
+        if True in torch.isnan(z[maxidx]):
+            print(z)
+            print(action, value)
+            print(maxidx)
+        return int(action), value
     temp += torch.finfo(z.dtype).tiny
     # z = np.array(z)
     if z.dim() == 1:

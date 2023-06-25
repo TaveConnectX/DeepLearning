@@ -29,6 +29,8 @@ class RandomReplayBuffer:
     
     def get_length(self):
         return len(self.buffer)
+    def get_maxlen(self):
+        return self.buffer.maxlen
     
     def shuffle(self):
         random.shuffle(self.buffer)

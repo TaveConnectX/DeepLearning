@@ -75,7 +75,10 @@ class ConnectFourDQNAgent(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         config = get_model_config(config_file_name)
+        # print(kwargs)
         for key, value in kwargs.items():
+            # print("key, value")
+            # print(key, value)
             config[key] = value
 
         self.use_conv=config['use_conv']
@@ -170,6 +173,15 @@ class ConnectFourDQNAgent(nn.Module):
 
             q_value = self.policy_net(state_)
 
+            # print(env.board)
+            # print(q_value.reshape(7,7))
+            # if True in torch.isnan(q_value):
+            #     print( q_value.reshape(7,7))
+            #     print(state)
+            #     print(state_)
+            #     print(env.board)
+            #     exit()
+            #     print()
             # temp=0 은 greedy action을 의미하므로
             temp = 0 if self.softmax_const < self.eps else self.temp
 
@@ -184,6 +196,7 @@ class ConnectFourDQNAgent(nn.Module):
                     distinct_actions,
                     temp=temp
                 )
+                
                 # for debugging
                 # print(q_value.reshape(7,7))
                 # print(valid_actions)
@@ -219,7 +232,9 @@ class ConnectFourDQNAgent(nn.Module):
     def train(self,epi,env:env.ConnectFourEnv,op_model):
         env.reset()
 
-
+        # self.eps += self.memory.get_maxlen()//10/epi
+        # epi += self.memory.get_maxlen()//10
+        print(self.eps, epi)
         if self.selfplay:
             players = {1: self}
             new_model = copy.deepcopy(self)
@@ -308,45 +323,50 @@ class ConnectFourDQNAgent(nn.Module):
                         for _ in range(repeat):
                             # 돌을 놓자마자 끝났으므로, next_state가 반전됨, 따라서 -1을 곱해준다
                             
-                            if turn==1:
+                            if turn==1 or True:
                                 if self.use_minimax:
                                     self.memory.add(state, action, op_action_prediction, reward, op_state*-1,mask,done)
+                                elif self.next_state_is_op_state:
+                                    self.memory.add(state, action, reward, op_state,mask,done)
                                 else:
                                     self.memory.add(state,action, reward, op_state*-1, mask,done)
                                 # print for debugging
                                 # print("for player")
                                 # print("state:\n",torch.round(state).reshape(6,7).int())
                                 # print("action:",action)
+                                
                                 # print("reward:",reward)
                                 # print("next_state:\n",torch.round(op_state*-1).reshape(6,7).int())
-                                # print("mask:\n",torch.round(mask).reshape(7,7))
+                                # print("mask:\n",torch.round(mask))
                                 # print()
                             # 내가 이겼으므로 상대는 음의 보상을 받음 
                             #Qmodels[op_player].append_memory(past_state, past_action, -reward, op_state, done)
-                            if turn==2:
+                            if turn==2 or True:
                                 if self.use_minimax:
                                     self.memory.add(past_state, past_action, action, -reward, op_state, mask,done)
                                 elif self.next_state_is_op_state:
                                     
-                                    self.memory.add(past_state, past_action,-reward, state*-1,mask, done)
+                                    self.memory.add(past_state, past_action,past_reward, state,mask, past_done)
                                 else:
                                     self.memory.add(past_state, past_action, -reward, op_state, mask,done)
                                 # print for debugging
                                 # print("for opponent")
                                 # print("state:\n",torch.round(past_state).reshape(6,7).int())
                                 # print("action:",past_action)
+                                # print("op_action:",action)
                                 # print("reward:",-reward)
+                                # print("next_state\n",torch.round(state).reshape(6,7).int())
                                 # print("next_state\n",torch.round(op_state).reshape(6,7).int())
-                                # print("mask\n",mask.reshape(7,7))
+                                # print("mask\n",mask)
                                 # print()
 
 
                     # 경기가 끝나지 않았다면
-                    elif turn==2:  # 내 경험만 수집한다
+                    elif turn==2 or True:  # 내 경험만 수집한다
                         if self.use_minimax:
                             self.memory.add(past_state, past_action, action, past_reward, op_state, mask,past_done)
                         elif self.next_state_is_op_state:
-                            self.memory.add(past_state, past_action, past_reward, state*-1,mask,past_done)
+                            self.memory.add(past_state, past_action, past_reward, state,mask,past_done)
                         else:
                             self.memory.add(past_state, past_action, past_reward, op_state, mask,past_done)
                         # print for debugging
@@ -354,8 +374,8 @@ class ConnectFourDQNAgent(nn.Module):
                         # print("state:\n",torch.round(past_state).reshape(6,7).int())
                         # print("action:",past_action)
                         # print("reward:",past_reward)
-                        # print("next_state\n",torch.round(op_state).reshape(6,7).int())
-                        # print("mask\n",mask.reshape(7,7))
+                        # print("next_state\n",torch.round(state*-1).reshape(6,7).int())
+                        # print("mask\n",mask)
                         # print()
 
                 
@@ -387,7 +407,8 @@ class ConnectFourDQNAgent(nn.Module):
                     new_model.policy_net.eval()
                     new_model.target_net.eval()
                     new_model.eps = 0.1
-                    new_model.temp = 0.3
+                    new_model.softmax_const = 0
+                    new_model.temp = 0
                     pool.append(new_model)
                 # if Qagent.memory and abs(Qagent.memory[-1][2])!=1:
                 #     print("state:\n",torch.round(Qagent.memory[-1][0]).int())
@@ -536,10 +557,12 @@ class ConnectFourDQNAgent(nn.Module):
 
     # mini-batch로 업데이트 
     def replay(self):
-        if self.memory.get_length() < self.batch_size*2:
+        # if self.memory.get_length() < self.memory.get_maxlen():
+        #     return
+        if self.memory.get_length() < self.batch_size:
             return
-        
         self.memory.shuffle()
+
         # batch size 만큼 랜덤으로 꺼낸다 
         # minibatch = random.sample(self.memory, self.batch_size)
 
@@ -581,20 +604,27 @@ class ConnectFourDQNAgent(nn.Module):
             qs, idxs = torch.max(op_qs, dim=1)
             op_idxs = torch.gather(op_idxs ,1, idxs.reshape(-1,1)).squeeze()
             acts = idxs*7 + op_idxs
+            
             Q2 = Q2.gather(1, acts.unsqueeze(dim=1)).squeeze()
             Y = r_batch + self.gamma * ((1-d_batch) * Q2)
+
+
 
         elif self.use_minimax:
             mask_q = Q2.reshape(-1,7,7) * m_batch
             mask_q[mask_q==0] = float('inf')
             op_qs = torch.amin(mask_q, dim=2)
             op_qs = torch.nan_to_num(op_qs, posinf=float('-inf'))
-            Y = r_batch + self.gamma * ((1-d_batch) * torch.amax(op_qs, dim=1))
+            qs = torch.nan_to_num(torch.amax(op_qs, dim=1), neginf=0.)
+            Y = r_batch + self.gamma * ((1-d_batch) * qs)
+            
+
         elif self.double_dqn:
             mask_q = self.policy_net(s_prime_batch) * m_batch
             mask_q[mask_q==0] = float('-inf')
             Q2 = Q2.gather(1, mask_q.argmax(dim=1).unsqueeze(dim=1)).squeeze()
             Y = r_batch + self.gamma * NSIOP*((1-d_batch)* Q2)
+
         else:
             mask_q = Q2 * m_batch
             mask_q[mask_q==0] =float('-inf')
@@ -602,7 +632,19 @@ class ConnectFourDQNAgent(nn.Module):
         
         # 해당하는 action을 취한 q value들
         X = Q1.gather(dim=1,index=a_batch.long().unsqueeze(dim=1)).squeeze()
-        
+       
+        # if r_batch[20] == 0:
+        #     print(Q1[20].reshape(7,7))
+        #     print(torch.round(s_batch[20]))
+        #     print(torch.round(s_prime_batch[20]))
+        #     print(mask_q[20])
+        #     print(a_batch[20]//7, a_batch[20]%7)
+        #     print(X[20])
+        #     print(Y[20])
+        #     print()
+
+
+
         loss = nn.MSELoss()(X, Y.detach())
         # print("to compare overestimation of Q value")
         # print(state1_batch[200][0])
@@ -614,6 +656,25 @@ class ConnectFourDQNAgent(nn.Module):
         # print()
 
         # tensor.numpy()는 cpu에서만 가능하므로 cpu() 처리
+        # loss에 nan이 있다면 처리
+        # if True in torch.isnan(loss):
+        #     idx = torch.nonzero(torch.isnan(Y)).squeeze()
+        #     print(idx)
+        #     print(X[idx])
+        #     print(Y[idx])
+        #     print(loss)
+
+        #     print(mask_q[idx])
+        #     print(Q2[idx])
+        #     print(Q1[idx])
+        #     print()
+        #     print(s_batch[idx])
+        #     print(a_batch[idx])
+        #     print(r_batch[idx])
+        #     print(m_batch[idx])
+        #     print(s_prime_batch[idx])
+        #     print(d_batch[idx])
+        #     exit()
         self.losses.append(loss.detach().cpu().numpy())
         self.optimizer.zero_grad()
         loss.backward()

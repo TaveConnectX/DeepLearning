@@ -9,15 +9,17 @@ import keyboard
 from agent_structure import ConnectFourDQNAgent, MinimaxAgent
 from functions import get_model_config, get_model_and_config_name
 
+X_mark = "\033[31mX\033[0m"
+O_mark = "\033[33mO\033[0m"
 
 def print_board_while_gaming(env, pointer, board=None):
     os.system('cls')
     print("Connect Four")
-    print("Player1: X")
-    print("Player2: O")
+    print("Player1: "+X_mark)
+    print("Player2: "+O_mark)
     print("-----------------------")
     empty_space = [" "]*env.n_col
-    empty_space[pointer] = "X" if env.player == 1 else "O"
+    empty_space[pointer] = X_mark if env.player == 1 else O_mark
     if board is None:
         board = copy.deepcopy(env.board)
     else:
@@ -39,9 +41,9 @@ def print_board_while_gaming(env, pointer, board=None):
             if board[row][col] == 0:
                 row_str += " "
             elif board[row][col] == 1:
-                row_str += "X"
+                row_str += X_mark
             elif board[row][col] == 2:
-                row_str += "O"
+                row_str += O_mark
             row_str += "|"
         print(row_str)
     print("+" + "-" * (len(board[0]) * 2 - 1) + "+")
@@ -59,14 +61,22 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # 나중에 RandomAgent가 추가된다면 ConnectFourDQNAgent(), RandomAgent(), HeuristicAgent() 등등 선택 가능
 #agent = env.HeuristicAgent()
 config = get_model_config()
-agent = ConnectFourDQNAgent()
-agent.eps = 0
+
 
 model_name, config_name = get_model_and_config_name('model/model_for_play')
+prev_model_config = get_model_config('model/model_for_play/'+config_name)
+kwargs={
+    'use_conv':prev_model_config['use_conv'], \
+    'use_minimax':prev_model_config['use_minimax'], \
+    'use_resnet':prev_model_config['use_resnet'],
+    'next_state_is_op_state':prev_model_config['next_state_is_op_state']
+}
+agent = ConnectFourDQNAgent(**kwargs)
+agent.eps = 0
 agent.policy_net.load_state_dict(torch.load('model/model_for_play/'+model_name, map_location=device))
 agent.update_target_net()   
 
-agent = MinimaxAgent()
+# agent = MinimaxAgent()
 pointer = 3
 new_pointer = 3
 

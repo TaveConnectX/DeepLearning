@@ -7,11 +7,14 @@ model_name, model_config = get_model_and_config_name(folder_path)
 
 # 불러온 config 파일로 모델 껍데기를 만듦
 prev_model_config = get_model_config(folder_path+'/'+model_config)
-agent = ConnectFourDQNAgent({
+kwargs={
     'use_conv':prev_model_config['use_conv'], \
     'use_minimax':prev_model_config['use_minimax'], \
-    'use_resnet':prev_model_config['use_resnet']
-})
+    'use_resnet':prev_model_config['use_resnet'],
+    'next_state_is_op_state':prev_model_config['next_state_is_op_state']
+}
+agent = ConnectFourDQNAgent(config_file_name=None, **kwargs)
+print(agent.use_resnet)
 # 불러온 모델 파일로 모델 업로드
 load_model(agent.policy_net, filename=folder_path+'/'+model_name)
 

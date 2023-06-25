@@ -15,5 +15,6 @@
 
     "use_conv":true,
     "use_resnet":true,
-    "use_minimax":true
+    "use_minimax":true,
+    "next_state_is_op_state":false
 }

@@ -13,7 +13,20 @@ from functions import get_model_config, save_model, \
                         get_current_time, get_model_and_config_name, load_model
 from agent_structure import ConnectFourDQNAgent, HeuristicAgent, set_op_agent
 
+def seed_everything(seed: int = 42):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    random.seed(seed)
+    np.random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    if device == "cuda:0":
+        torch.cuda.manual_seed(seed)  # type: ignore
+        torch.cuda.manual_seed_all(seed)
+        # 이건 학습 속도가 줄어든다고 함 
+        torch.backends.cudnn.deterministic = True  # type: ignore
+        torch.backends.cudnn.benchmark = False  # type: ignore
 
+seed_everything()
 config = get_model_config()
 
 # 상대를 agent의 policy로 동기화 시키는건 편향이 세지므로 일단 제외
@@ -35,10 +48,26 @@ if config['selfplay']:
     Qagent = ConnectFourDQNAgent({
         'use_conv':prev_model_config['use_conv'], \
         'use_minimax':prev_model_config['use_minimax'], \
-        'use_resnet':prev_model_config['use_resnet']
+        'use_resnet':prev_model_config['use_resnet'], \
+        'next_state_is_op_state':prev_model_config['next_state_is_op_state']
     })
     # 불러온 모델 파일로 모델 업로드
     load_model(Qagent.policy_net, filename=folder_path+'/'+model_name)
+elif config['continuous_train']:
+    folder_path = 'model/model_for_continuous_train'
+    model_name, model_config = get_model_and_config_name(folder_path)
+    # print(SL_model_name,SL_model_config)
+    # 불러온 config 파일로 모델 껍데기를 만듦
+    prev_model_config = get_model_config(folder_path+'/'+model_config)
+    Qagent = ConnectFourDQNAgent({
+        'use_conv':prev_model_config['use_conv'], \
+        'use_minimax':prev_model_config['use_minimax'], \
+        'use_resnet':prev_model_config['use_resnet'], \
+        'next_state_is_op_state':prev_model_config['next_state_is_op_state']
+    })
+    # 불러온 모델 파일로 모델 업로드
+    load_model(Qagent.policy_net, filename=folder_path+'/'+model_name)
+
 # Qagent2 = env.ConnectFourDQNAgent(eps=1)  # it means Qagent2 has random policy
 # if Qagent is MinimaxDQNAgent and Qagent2 is None,
 # Qagent will train with its own.
