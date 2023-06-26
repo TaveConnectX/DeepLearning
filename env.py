@@ -161,6 +161,7 @@ class ConnectFourEnv:
             reward = -1
             # print(self.board, action)
             print("1:this cannot be happened")
+            exit()
         else:
             # piece를 둠 
             for row in range(self.n_row-1,-1,-1):

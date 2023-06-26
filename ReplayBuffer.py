@@ -13,6 +13,7 @@ class RandomReplayBuffer:
         self.use_conv = use_conv
         self.use_minimax = use_minimax
         self.buffer = deque(maxlen=buffer_size)
+        self.start_size = 50000
     
     def add(self, *exp):        
 

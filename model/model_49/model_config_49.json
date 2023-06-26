@@ -1,10 +1,10 @@
 {
-    "epi": 1001,
+    "epi": 10001,
     "lr": 0.0001,
     "gamma": 0.99,
-    "batch_size": 128,
-    "target_update": 5000,
-    "memory_len": 20000,
+    "batch_size": 64,
+    "target_update": 50,
+    "memory_len": 100000,
     "repeat_reward": 1,
     "optimizer": "RMSprop",
     "noise_while_train": true,
@@ -24,5 +24,5 @@
     "model_name": "DQN-resnet-minimax-v1",
     "win_rate": 0.19,
     "op_model_type": "Heuristic-v1",
-    "train_time": "20230624_101818"
+    "train_time": "20230626_010917"
 }

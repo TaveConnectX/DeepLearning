@@ -72,6 +72,7 @@ elif config['continuous_train']:
 # if Qagent is MinimaxDQNAgent and Qagent2 is None,
 # Qagent will train with its own.
 Qagent2 = set_op_agent(config['op_agent'])  # 상대 agent
+if Qagent2 == 'self': Qagent2 = Qagent
 
 
 # # 모델을 pth 파일로 저장
