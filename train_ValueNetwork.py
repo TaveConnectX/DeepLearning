@@ -3,6 +3,7 @@ from functions import get_model_and_config_name, board_normalization, \
 import env
 from agent_structure import ConnectFourDQNAgent
 import random
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -74,14 +75,14 @@ RL_model_name, RL_model_config = get_model_and_config_name(folder_path+'/model_R
 RL_agent = ConnectFourDQNAgent(config_file_name=folder_path+'/model_RL/'+RL_model_config)
 load_model(RL_agent.policy_net, filename=folder_path+'/model_RL/'+RL_model_name)
 
-SL_agent.eps, RL_agent.eps = 0.0, 0.0  # greedy 한 action을 취하기 위해서
+SL_agent.eps, RL_agent.eps = 0.05, 0.05  # 되도록 greedy 한 action을 취하기 위해서
 
 
 # 환경 생성 
 VEnv = env.ConnectFourEnv()
 
 # 전역변수 설정
-total_count = 200000
+total_count = 10
 learn_count = int(total_count * 0.8)
 test_count = total_count - learn_count
 
@@ -98,10 +99,11 @@ for i in range(0, total_count) :
 
     use_rl = False  # RL 에이전트를 사용할 턴인지 여부
     rl_start_turn = random.randint(15, 20)  # RL 에이전트를 사용하기 시작하는 턴 (랜덤으로 지정)
-
+    
     for turn in range(1, 41):
         #print("Turn:", turn)
         # SL 에이전트 사용 (1 ~ rl_start_turn 수)
+        # print(VEnv.board)
         if turn < rl_start_turn :
             action = SL_agent.select_action(state=state, env=VEnv, player=VEnv.player)
             if SL_agent.use_minimax: 
@@ -113,7 +115,9 @@ for i in range(0, total_count) :
                 if RL_agent.use_minimax: 
                     action = action[0]  # action은 이제 0~6 의 정수가 됨 
             else:
-                action = random.randint(0, 6)  # 랜덤으로 액션 선택
+                # 완전 랜덤으로 고르면 꽉찬 열에 둘 수 있어서 수정함 
+                action = np.random.choice(VEnv.valid_actions)
+                # action = random.randint(0, 6)  # 랜덤으로 액션 선택
 
         #print("Selected Action:", action)
 
@@ -124,6 +128,7 @@ for i in range(0, total_count) :
         if turn == rl_start_turn:
             important_state = state
             use_rl = True
+            print(turn,important_state)
         
         if (use_rl == False) :
             important_state = state
@@ -160,6 +165,14 @@ for i in range(0, total_count) :
             # 최종 리스트에 추가
             data.append(tmp)
             break
+
+# 데이터 잘 수집되었는지 확인 
+# for i,d in enumerate(data) :
+#     # print(i, d)
+#     b = np.array(d[0])  # board
+#     cnt = np.count_nonzero(b) # 0이 아닌 수의 개수 
+#     r = d[1]  # result: win lose draw
+#     print(cnt,b,r)
 
 # 학습
 for i in range(0, learn_count) :
