@@ -1,6 +1,7 @@
 
 import torch
 import math
+import random
 import numpy as np
 
 # env.py 의 ConnectFourEnv와는 다르게 게임 규칙만 들어가 있음 
@@ -60,6 +61,130 @@ class CFEnvforAlphaZero:
 
     def get_perspective_state(self, state, player):
         return state * player
+
+# def get_next_state(state, action, player):
+#         board = np.copy(state)
+#         col = int(action)
+#         len_row = len(board)
+#         if not board[0,col] == 0:
+#             print(board, col, player)
+#             print("1:this cannot be happened")
+#         else:
+#             # piece를 둠 
+#             for row in range(len_row-1,-1,-1):
+#                 if board[row][col] == 0:
+#                     board[row][col] = player
+#                     break
+#                 else: continue
+        
+#         return board, player * -1
+
+
+# def is_done(state):
+#         row = len(state)
+#         col = len(state[0])
+#         for player in [1,-1]:
+#             for i in range(row):
+#                 for j in range(col):
+#                     if state[i][j] == player:
+#                         # horizontal
+#                         if j + 3 < col and state[i][j+1] == state[i][j+2] == state[i][j+3] == player:
+#                             return player
+#                         # vertical
+#                         if i + 3 < row and state[i+1][j] == state[i+2][j] == state[i+3][j] == player:
+#                             return player
+#                         # diagonal (down right)
+#                         if i + 3 < row and j + 3 < col and state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3] == player:
+#                             return player
+#                         # diagonal (up right)
+#                         if i - 3 >= 0 and j + 3 < col and state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3] == player:
+#                             return player
+
+#         # 맨 윗줄이 모두 꽉차있다면, 비긴 것
+#         if not 0 in state[0,:]:
+#             return 0
+#         # game이 아직 끝나지 않았을 때 
+#         return None
+
+# class Node:
+#     def __init__(self, prior, turn, state):
+#         self.prior = prior
+#         self.turn = turn
+#         self.state = state
+#         self.children = {}
+#         self.visits = 0
+#         self.value = 0
+
+#     def expand(self, action_probs):
+#         for action, prob in enumerate(action_probs):
+#             if prob==0: continue
+#             next_state, next_turn = get_next_state(self.state, action, self.turn)
+#             self.children[action] = Node(prob, next_turn, next_state)
+
+#     def select_child(self):
+#         max_score = float('-inf')
+#         for action, child in self.children.items():
+#             score = ucb_score(self, child)
+#             if score > max_score:
+#                 selected_action = action
+#                 selected_child = child
+#                 max_score = score
+
+#         return selected_action, selected_child
+    
+
+
+
+# def dummy_model_predict(state):
+#     return 0.5, [0.5,0,0,0,0,0.5,0]
+# def ucb_score(parent, child):
+#     prior_score = child.prior * math.sqrt(parent.visits) / (child.visits+1)
+
+#     if child.visits == 0: value_score = 0
+#     else: value_score = child.value / child.visits
+
+#     return value_score + prior_score
+
+
+# board = np.array([[0,1,1,1,-1,0,1],
+#                   [0,-1,1,-1,-1,0,-1],
+#                   [1,-1,1,-1,-1,0,1],
+#                   [-1,1,-1,1,1,0,1],
+#                   [1,1,-1,1,-1,-1,1],
+#                   [1,-1,-1,1,-1,1,-1]])
+# board *= -1
+# root = Node(prior=0, turn=1, state=board)
+# value, action_probs =dummy_model_predict(board)
+
+# root.expand(action_probs=action_probs)
+
+
+# for _ in range(100):
+#     node = root
+#     search_path = [node]
+
+#     while len(node.children) > 0:
+#         action, node = node.select_child()
+#         search_path.append(node)
+
+#     value = None
+#     done = is_done(node.state)
+#     if done==0:
+#         value = 0
+#     elif done==1:
+#         value = 1
+#     elif done==-1:
+#         value = -1
+
+#     if value is None:
+#         value, action_probs = dummy_model_predict(node.state)
+#         node.expand(action_probs)
+
+#     for node in search_path:
+#         node.value += value
+#         node.visits += 1
+
+
 
 class Node:
     def __init__(self, prior_prob, turn, state=None):

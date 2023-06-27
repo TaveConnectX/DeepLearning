@@ -20,6 +20,7 @@
     "use_conv": true,
     "use_resnet": true,
     "use_minimax": true,
+    "use_nash":true,
     "next_state_is_op_state": false,
     "model_name": "DQN-resnet-minimax-v1",
     "win_rate": 0.58,

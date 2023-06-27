@@ -8,10 +8,11 @@ import torch
 from torch import nn, optim
 import time
 import env
+import nashpy as nash
 from env import Tree, Node, compare_model
 from functions import board_normalization, \
     get_model_config, set_optimizer, \
-    get_distinct_actions, is_full_after_my_turn, get_minimax_action, \
+    get_distinct_actions, is_full_after_my_turn, \
     softmax_policy, get_valid_actions, get_next_board
 from ReplayBuffer import RandomReplayBuffer
 # models.py 분리 후 이동, 정상 작동하면 지울 듯 
@@ -19,6 +20,7 @@ from ReplayBuffer import RandomReplayBuffer
 # import torch.nn.functional as F
 from models import DQNModel, HeuristicModel, RandomModel, MinimaxModel
 import json
+
 # editable hyperparameters
 # let iter=10000, then
 # learning rate 0.01~0.00001
@@ -83,6 +85,7 @@ class ConnectFourDQNAgent(nn.Module):
         self.use_conv=config['use_conv']
         self.use_resnet=config['use_resnet']
         self.use_minimax=config['use_minimax']
+        self.use_nash=config['use_nash']
         self.next_state_is_op_state = config['next_state_is_op_state']
         if self.use_minimax and self.next_state_is_op_state:
             print("invalid model structure")
@@ -144,7 +147,128 @@ class ConnectFourDQNAgent(nn.Module):
         # record of win rate of random, heuristic, minimax agent
         self.record = [[], [], []]  
 
+    # def get_nash_action(self, q_value,valid_actions, distinct_actions):
+    #     # if len(valid_actions) == 1: 
+    #     #     return (valid_actions[0],valid_actions[0])
+    #     A = q_value.cpu().detach().numpy().reshape(7,7)
+    #     A = A[valid_actions][:,valid_actions]
+    #     # print(A,B)
+    #     game = nash.Game(A)
+    #     try:
+    #         print(valid_actions)
+    #         print(distinct_actions)
+    #         print(A)
+    #         action_prob1, action_prob2 = game.lemke_howson(initial_dropped_label=0)
+    #         if len(action_prob1) != len(valid_actions) or len(action_prob2) != len(valid_actions):        # GAME IS DEGENERATE
+    #             equilibria = game.support_enumeration()
+    #             action_prob1, action_prob2 = next(equilibria)
+    #     except:
+    #         equilibria = game.support_enumeration()
+    #         action_prob1, action_prob2 = next(equilibria)
+    #     # print(valid_actions)
+    #     # print(action_prob1)
+    #     # print(action_prob2)
+    #     # print()
+    #     a = np.random.choice (valid_actions, p=action_prob1)
+    #     b = np.random.choice (valid_actions, p=action_prob2)
+    #     # print("probA:",prob[0])
+    #     # print("probB:",prob[1])
+    #     if not (a in distinct_actions and a==b):
+    #         return (a,b)
+    #     else:
+    #         return (None, None)
 
+    # https://code.activestate.com/recipes/496825-game-theory-payoff-matrix-solver/
+    # 내쉬 균형 찾는 코드 참고 
+    def get_nash_prob_and_value(self,payoff_matrix, vas, das, iterations=50):
+        if isinstance(payoff_matrix, torch.Tensor):    
+            payoff_matrix = payoff_matrix.clone().detach().reshape(7,7)
+        elif isinstance(payoff_matrix, np.ndarray):
+            payoff_matrix = payoff_matrix.reshape(7,7)
+        payoff_matrix = payoff_matrix[vas][:,vas]
+        
+        '''Return the oddments (mixed strategy ratios) for a given payoff matrix'''
+        transpose_payoff = torch.transpose(payoff_matrix,0,1)
+        row_cum_payoff = torch.zeros(len(payoff_matrix)).to(self.device)
+        col_cum_payoff = torch.zeros(len(transpose_payoff)).to(self.device)
+
+        col_count = np.zeros(len(transpose_payoff))
+        row_count = np.zeros(len(payoff_matrix))
+        active = 0
+        for i in range(iterations):
+            row_count[active] += 1 
+            col_cum_payoff += payoff_matrix[active]
+            active = torch.argmin(col_cum_payoff)
+            col_count[active] += 1 
+            row_cum_payoff += transpose_payoff[active]
+            active = torch.argmax(row_cum_payoff)
+            
+        value_of_game = (max(row_cum_payoff) + min(col_cum_payoff)) / 2.0 / iterations  
+        row_prob = row_count / iterations
+        col_prob = col_count / iterations
+        
+        return row_prob, col_prob, value_of_game
+    
+    def get_nash_action(self, q_value,valid_actions, distinct_actions):
+        # if len(valid_actions) == 1: 
+        #     return (valid_actions[0],valid_actions[0])
+        # print(A,B)
+        action_prob1, action_prob2, value = self.get_nash_prob_and_value(q_value, valid_actions, distinct_actions)
+        # print(valid_actions)
+        # print(action_prob1)
+        # print(action_prob2)
+        # print()
+        a = np.random.choice (valid_actions, p=action_prob1)
+        b = np.random.choice (valid_actions, p=action_prob2)
+        # print("probA:",prob[0])
+        # print("probB:",prob[1])
+        if not (a in distinct_actions and a==b):
+            return (a,b)
+        else:
+            return (None, None)
+
+    # softmax를 포함한 minimax action sampling
+    def get_minimax_action(self, q_value,valid_actions, distinct_actions, temp=0):
+        if is_full_after_my_turn(valid_actions, distinct_actions):
+                return (valid_actions[0], np.random.choice(valid_actions))
+        
+        if self.use_nash:
+            a,b = self.get_nash_action(q_value,valid_actions, distinct_actions)
+            if (a,b) != (None, None):
+                return a,b
+        
+            
+        q_dict = {}
+        # print(valid_actions)
+        # print(distinct_actions)
+        for a in valid_actions:
+            q_dict[a] = []
+            for b in valid_actions:
+                if a in distinct_actions and a==b: continue
+                idx = 7*a + b
+                # print(a,b)
+                # print(q_value[idx])
+                # print(q_dict[a][1])
+                
+                q_dict[a].append((b, -q_value[idx]))
+            
+            op_action, value = softmax_policy(torch.tensor(q_dict[a]), temp=temp)
+            # if torch.isnan(value):
+            #     print(a,b)
+            #     print(q_value.reshape(7,7))
+            #     print(q_dict)
+            q_dict[a] = (op_action, -1 * value)
+
+        qs_my_turn = [[key, value[1]] for key, value in q_dict.items()]
+        action, value = softmax_policy(torch.tensor(qs_my_turn), temp=temp)
+        # if torch.isnan(value):
+        #         print(a,b)
+        #         print(q_value.reshape(7,7))
+        #         print(q_dict)
+
+
+        return (action, q_dict[action][0])
+    
     def select_action(self, state, env, player=1):
         
         valid_actions = env.valid_actions
@@ -195,7 +319,7 @@ class ConnectFourDQNAgent(nn.Module):
                 # print("valid_actions:",valid_actions)
                 # print("q_value:",q_value)
                 
-                a,b = get_minimax_action(
+                a,b = self.get_minimax_action(
                     q_value.squeeze(0),
                     valid_actions, 
                     distinct_actions,
@@ -280,7 +404,13 @@ class ConnectFourDQNAgent(nn.Module):
                     action = action[0]
                 
                 observation, reward, done = env.step(action)
-                if self.use_minimax:
+                if self.use_minimax and self.use_nash:
+                    mask = torch.zeros(7)
+                    VA = get_valid_actions(observation)
+                    DA = get_distinct_actions(env)
+                    mask[VA] = 1
+                    mask[DA] = 2
+                elif self.use_minimax:
                     mask = torch.ones(7,7)
                     VA = get_valid_actions(observation)
                     DA = get_distinct_actions(env)
@@ -370,7 +500,7 @@ class ConnectFourDQNAgent(nn.Module):
             new_model.target_net.eval()
             new_model.eps = 0.1
             
-            pool = deque([new_model], maxlen=200)
+            pool = deque([new_model], maxlen=1000)
         # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
         else: players = {1: self, 2: self}
 
@@ -409,20 +539,27 @@ class ConnectFourDQNAgent(nn.Module):
                     print("this cannot be happen in minimax")
                     exit()
                 
-                action, op_action = self.select_action(state, env, player=turn)
+                action, op_action = players[turn].select_action(state, env, player=turn)
                 
                 
                 
                 observation, reward, done = env.step(action)
-                mask = torch.ones(7,7)
-                VA = get_valid_actions(observation)
-                DA = get_distinct_actions(env)
-                for a in range(7):
-                    if not a in VA:
-                        mask[a,:] = 0
-                        mask[:,a] = 0
-                for da in DA:
-                    mask[da,da] = 0
+                if self.use_nash:
+                    mask = torch.zeros(7)
+                    VA = get_valid_actions(observation)
+                    DA = get_distinct_actions(env)
+                    mask[VA] = 1
+                    mask[DA] = 2
+                else:
+                    mask = torch.ones(7,7)
+                    VA = get_valid_actions(observation)
+                    DA = get_distinct_actions(env)
+                    for a in range(7):
+                        if not a in VA:
+                            mask[a,:] = 0
+                            mask[:,a] = 0
+                    for da in DA:
+                        mask[da,da] = 0
                 # for debugging
                 # print(observation)
                 # print(VA)
@@ -450,18 +587,29 @@ class ConnectFourDQNAgent(nn.Module):
                     break
                             
                 # 아직 안끝났으면,
-                op_real_action, _ = self.select_action(state, env, player=turn)
-                op_observation, op_reward, op_done = env.step(op_real_action) 
+                if self.selfplay:
+                    op_real_action, _ = players[2].select_action(op_state, env, player=turn)
+                    op_observation, op_reward, op_done = env.step(op_real_action) 
+                else:
+                    op_observation, op_reward, op_done = env.step(op_action)
+
                 done = done or op_done
-                mask = torch.ones(7,7)
-                VA = get_valid_actions(op_observation)
-                DA = get_distinct_actions(env)
-                for a in range(7):
-                    if not a in VA:
-                        mask[a,:] = 0
-                        mask[:,a] = 0
-                for da in DA:
-                    mask[da,da] = 0   
+                if self.use_nash:
+                    mask = torch.zeros(7)
+                    VA = get_valid_actions(observation)
+                    DA = get_distinct_actions(env)
+                    mask[VA] = 1
+                    mask[DA] = 2
+                else:
+                    mask = torch.ones(7,7)
+                    VA = get_valid_actions(op_observation)
+                    DA = get_distinct_actions(env)
+                    for a in range(7):
+                        if not a in VA:
+                            mask[a,:] = 0
+                            mask[:,a] = 0
+                    for da in DA:
+                        mask[da,da] = 0   
 
                 next_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
                 next_state = torch.from_numpy(next_state_).float() 
@@ -483,7 +631,11 @@ class ConnectFourDQNAgent(nn.Module):
                 state = next_state.clone()
                 
                 # replay buffer 를 이용하여 mini-batch 학습
-                self.replay()
+                if self.use_minimax and self.use_nash:
+                    self.replay_nash()
+                else:
+                    self.replay()
+
                 if self.selfplay and self.steps and not self.steps%self.add_pool_freq:
                     print("added in pool")
                     new_model = copy.deepcopy(self)
@@ -837,6 +989,152 @@ class ConnectFourDQNAgent(nn.Module):
     #         # min epsilon을 가지기 전까지 episode마다 조금씩 낮춰준다(1 -> 0.1)
     #         if self.eps > 0.1: self.eps -= (1/epi)
 
+    def replay_nash(self):
+        if self.memory.get_length() < self.memory.start_size:
+            return
+        
+        # 메모리를 계속 섞어
+        # self.memory.shuffle()
+
+        
+        s_batch, a_batch, r_batch, s_prime_batch, m_batch, d_batch = self.memory.sample()
+
+        # print("state1_batch:",state1_batch.shape)
+        Q1 = self.policy_net(s_batch)  # (256,7)
+        with torch.no_grad():
+            Q2 = self.target_net(s_prime_batch)
+            #m_batch = m_batch.reshape(-1,1)
+            
+        nash_q_values = []
+        
+        # target Q value들 
+        if self.double_dqn:
+
+            mask_qs = self.policy_net(s_prime_batch).reshape(-1,7,7)
+            Q2 = Q2.reshape(-1,7,7)
+            for i in range(mask_qs.shape[0]):
+                mask_q = mask_qs[i]
+                valid_as = torch.nonzero(m_batch[i], as_tuple=True)[0].cpu().numpy()
+                distinct_as = torch.nonzero(m_batch[i]==2, as_tuple=True)[0].cpu().numpy()
+                if not valid_as.tolist():
+                    q = 0
+
+                else:
+                    a_prob, b_prob, _ = self.get_nash_prob_and_value(mask_q, valid_as, distinct_as)
+                    norm_a_prob, norm_b_prob = np.zeros(7), np.zeros(7)
+                    norm_a_prob[valid_as] = a_prob
+                    norm_b_prob[valid_as] = b_prob
+                    q = np.sum(np.multiply.outer(norm_a_prob, norm_b_prob) * Q2[i].cpu().numpy())
+                
+                nash_q_values.append(q)
+
+            nash_q_values = torch.Tensor(nash_q_values).to(self.device).reshape(-1)
+                
+            Y = r_batch + self.gamma * ((1-d_batch) * nash_q_values)
+
+        # only DQN
+        else:
+            mask_qs = Q2.reshape(-1,7,7)
+            for i in range(Q2.shape[0]):
+                mask_q = mask_qs[i]
+                valid_as = torch.nonzero(m_batch[i], as_tuple=True)[0].cpu().numpy()
+                distinct_as = torch.nonzero(m_batch[i]==2, as_tuple=True)[0].cpu().numpy()
+                if not valid_as.tolist():
+                    q = 0
+                else:
+                    a_prob, b_prob, q = self.get_nash_prob_and_value(mask_q, valid_as, distinct_as)
+                
+                nash_q_values.append(q)
+            
+            nash_q_values = torch.Tensor(nash_q_values).to(self.device).reshape(-1)
+            # print("r size:",r_batch.shape)
+            # print("nash_q_values size:",nash_q_values.shape)
+            Y = r_batch + self.gamma * ((1-d_batch) * nash_q_values)
+            
+
+        
+        # 해당하는 action을 취한 q value들
+        X = Q1.gather(dim=1,index=a_batch.long().unsqueeze(dim=1)).squeeze()
+        # print(X)
+        # print(X.shape)
+        # print(Y)
+        # print(Y.shape)
+        # if r_batch[20] == 0:
+        #     print(Q1[20].reshape(7,7))
+        #     print(torch.round(s_batch[20]))
+        #     print(torch.round(s_prime_batch[20]))
+        #     print(mask_q[20])
+        #     print(a_batch[20]//7, a_batch[20]%7)
+        #     print(X[20])
+        #     print(Y[20])
+        #     print()
+
+
+
+        loss = nn.MSELoss()(X, Y.detach())
+        # print("to compare overestimation of Q value")
+        # print(state1_batch[200][0])
+        # print(state2_batch[200][0])
+        # print("action:",action_batch[200])
+        # print("reward:",reward_batch[200])
+        # print(Q1[200])
+        # print(Q2[200])
+        # print()
+
+        # tensor.numpy()는 cpu에서만 가능하므로 cpu() 처리
+        # loss에 nan이 있다면 처리
+        # if True in torch.isnan(loss):
+        #     idx = torch.nonzero(torch.isnan(Y)).squeeze()
+        #     print(idx)
+        #     print(X[idx])
+        #     print(Y[idx])
+        #     print(loss)
+
+        #     print(mask_q[idx])
+        #     print(Q2[idx])
+        #     print(Q1[idx])
+        #     print()
+        #     print(s_batch[idx])
+        #     print(a_batch[idx])
+        #     print(r_batch[idx])
+        #     print(m_batch[idx])
+        #     print(s_prime_batch[idx])
+        #     print(d_batch[idx])
+        #     exit()
+        self.losses.append(loss.detach().cpu().numpy())
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        # state, action, reward, next_state, done = zip(*minibatch)
+        # print(state)
+        # state = torch.FloatTensor(state) # .to(self.device)
+
+        # action = torch.LongTensor(action).unsqueeze(1)  #  .to(self.device)
+        # reward = torch.FloatTensor(reward).unsqueeze(1)  # .to(self.device)
+        # next_state = torch.FloatTensor(next_state)  # .to(self.device)
+        # done = torch.FloatTensor(done).unsqueeze(1)  # .to(self.device)
+        
+        # current_q_values = self.policy_net(state).gather(1, action)
+        # next_q_values = self.target_net(next_state).detach().max(1)[0].unsqueeze(1)
+        # expected_q_values = reward + self.gamma * next_q_values * (1 - done)
+        
+        # loss = nn.MSELoss()(current_q_values, expected_q_values)
+        # self.optimizer.zero_grad()
+        # loss.backward()
+        # self.optimizer.step()
+        self.steps += 1
+        if self.steps % self.target_update == 0:
+            print("update target net")
+            self.update_target_net()
+
+        
+    # target net에 policy net 파라미터 들을 업데이트 해줌 
+    def update_target_net(self):
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+
+
+    
     # mini-batch로 업데이트 
     def replay(self):
         # if self.memory.get_length() < self.memory.get_maxlen():
@@ -879,6 +1177,8 @@ class ConnectFourDQNAgent(nn.Module):
         NSIOP = -1 if self.next_state_is_op_state else 1
         # target Q value들 
         
+    
+
 
         if self.use_minimax and self.double_dqn:
             mask_q = self.policy_net(s_prime_batch).reshape(-1,7,7) * m_batch

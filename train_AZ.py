@@ -1,5 +1,6 @@
 import env
 import AlphaZeroenv
+from agent_structure import AlphaZeroAgent
 import copy
 import json
 import numpy as np
@@ -13,12 +14,12 @@ import os
 
 
 CFenv = AlphaZeroenv.CFEnvforAlphaZero()  # connext4 환경 생성
-agent = env.AlphaZeroAgent(env=CFenv, num_simulations=343, num_iterations=10, num_episodes=10, batch_size=16)
+agent = AlphaZeroAgent(env=CFenv, num_simulations=343, num_iterations=10, num_episodes=10, batch_size=16)
 
 agent.train(epochs=2)
 
 # 모델을 pth 파일로 저장
-def save_model(model, filename='ResNetmodel'):
+def save_model(model, filename='alphazero'):
     num = 1
     while True:
         folder_path = "model/model_{}".format(num)

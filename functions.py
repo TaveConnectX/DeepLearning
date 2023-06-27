@@ -5,7 +5,7 @@ import datetime
 import torch
 import copy 
 import numpy as np 
-
+from operator import add, neg
 # 모델을 pth 파일로 저장
 def save_model(model, filename='Model', folder_num=None):
     if folder_num is None:
@@ -102,35 +102,7 @@ def is_full_after_my_turn(valid_actions, distinct_actions):
 
 #     return (max_key, q_dict[max_key][0])
 
-# softmax를 포함한 minimax action sampling
-def get_minimax_action(q_value,valid_actions, distinct_actions, temp=0):
-    q_dict = {}
-    for a in valid_actions:
-        q_dict[a] = []
-        for b in valid_actions:
-            if a in distinct_actions and a==b: continue
-            idx = 7*a + b
-            # print(a,b)
-            # print(q_value[idx])
-            # print(q_dict[a][1])
-            q_dict[a].append((b, -q_value[idx]))
-        
-        op_action, value = softmax_policy(torch.tensor(q_dict[a]), temp=temp)
-        # if torch.isnan(value):
-        #     print(a,b)
-        #     print(q_value.reshape(7,7))
-        #     print(q_dict)
-        q_dict[a] = (op_action, -1 * value)
 
-    qs_my_turn = [[key, value[1]] for key, value in q_dict.items()]
-    action, value = softmax_policy(torch.tensor(qs_my_turn), temp=temp)
-    # if torch.isnan(value):
-    #         print(a,b)
-    #         print(q_value.reshape(7,7))
-    #         print(q_dict)
-
-
-    return (action, q_dict[action][0])
 
 def get_valid_actions(board):
     valid_actions = []
@@ -276,3 +248,45 @@ def set_optimizer(optimizer,parameters, lr):
     else:
         raise ValueError("optimizer is not defined")
     
+def get_nash_prob_and_value(payoff_matrix, iterations=100):
+    payoff_matrix = np.array(payoff_matrix)
+    '''Return the oddments (mixed strategy ratios) for a given payoff matrix'''
+    transpose_payoff = np.transpose(payoff_matrix)
+    row_cum_payoff = np.zeros(len(payoff_matrix))
+    col_cum_payoff = np.zeros(len(transpose_payoff))
+
+    col_count = np.zeros(len(transpose_payoff))
+    row_count = np.zeros(len(payoff_matrix))
+    active = 0
+    # print("payoff_matrix:",payoff_matrix)
+    # print("transpose payoff:",transpose_payoff)
+    # print("row_cum_payoff:",row_cum_payoff)
+    # print("col_cum_payoff:",col_cum_payoff)
+    # print("colpos:",col_pos)
+    # print("rowpos:",row_pos)
+    # print("colcnt:",col_count)
+    # print("rowcnt:",row_count)
+    # print("active:",active)
+
+    for i in range(iterations):
+        row_count[active] += 1 
+        col_cum_payoff += payoff_matrix[active]
+        # print("col_cum_payoff:",col_cum_payoff)
+
+        active = np.argmin(col_cum_payoff)
+        # print("active:",active)
+
+        col_count[active] += 1 
+
+        row_cum_payoff += transpose_payoff[active]
+        # print("row_cum_payoff:",row_cum_payoff)
+        
+        active = np.argmax(row_cum_payoff)
+        # print("active:",active)
+        
+        
+    value_of_game = (max(row_cum_payoff) + min(col_cum_payoff)) / 2.0 / iterations  
+    row_prob = row_count / iterations
+    col_prob = col_count / iterations
+    
+    return row_prob, col_prob, value_of_game

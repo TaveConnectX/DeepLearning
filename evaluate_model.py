@@ -11,7 +11,8 @@ kwargs={
     'use_conv':prev_model_config['use_conv'], \
     'use_minimax':prev_model_config['use_minimax'], \
     'use_resnet':prev_model_config['use_resnet'],
-    'next_state_is_op_state':prev_model_config['next_state_is_op_state']
+    'next_state_is_op_state':prev_model_config['next_state_is_op_state'],
+    'use_nash':prev_model_config['use_nash']
 }
 agent = ConnectFourDQNAgent(config_file_name=None, **kwargs)
 print(agent.use_resnet)
