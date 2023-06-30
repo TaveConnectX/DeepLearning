@@ -82,7 +82,7 @@ SL_agent.eps, RL_agent.eps = 0.05, 0.05  # 되도록 greedy 한 action을 취하
 VEnv = env.ConnectFourEnv()
 
 # 전역변수 설정
-total_count = 10
+total_count = 30000
 learn_count = int(total_count * 0.8)
 test_count = total_count - learn_count
 
@@ -153,7 +153,6 @@ for i in range(0, total_count) :
             tmp = list()
             tmp_forlist = list()
             # 데이터 가공 형식에 맞게 변형
-            print(important_state)
             tmp_forlist.append(important_state)
             tmp.append(tmp_forlist)
             # reword값을 각각의 배열로 변경
@@ -168,12 +167,12 @@ for i in range(0, total_count) :
             break
 
 # 데이터 잘 수집되었는지 확인 
-for i,d in enumerate(data) :
-    # print(i, d)
-    b = np.array(d[0])  # board
-    cnt = np.count_nonzero(b) # 0이 아닌 수의 개수 
-    r = d[1]  # result: win lose draw
-    print(cnt,b,r)
+# for i,d in enumerate(data) :
+#     # print(i, d)
+#     b = np.array(d[0])  # board
+#     cnt = np.count_nonzero(b) # 0이 아닌 수의 개수 
+#     r = d[1]  # result: win lose draw
+#     print(cnt,b,r)
 
 # 학습
 for i in range(0, learn_count) :
@@ -222,8 +221,7 @@ for i in range(learn_count, len(data)) :
     if (Predicted_label == real_label) :
         count += 1
 # 최종 정확도 출력
-print("percent : " + str(count/40000*100))
+print("percent : " + str(count/test_count*100))
 
-# percent : 65.5  (2만개) (학습 1.6만, 테스트 0.4만)
-# percent : 81.86 (10만개 (학습 8만, 테스트 2만))
-# percent : 83.765 (20만개 (학습 16만, 테스트 4만)) "ValueNetwork.pth"
+# percent : 70.19999999999999 (8000학습 + 2000테스트)
+# percent : 75.11666666666666 (24000학습 + 6000테스트)
