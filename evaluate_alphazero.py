@@ -2,10 +2,14 @@
 from functions import load_model, get_model_and_config_name, \
                     get_model_config
 from agent_structure import ConnectFourRandomAgent, HeuristicAgent, MinimaxAgent
-from alphazero_new import ConnectFour, ResNet, MCTS
-from env import ConnectFourEnv, board_normalization
+# from alphazero_new import ConnectFour, ResNet, MCTS
+from env import ConnectFourEnv, board_normalization, ConnectFour, MCTS
+from models import AlphaZeroResNet
 import numpy as np
 import torch
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def select_action(state, env, agent):
     print("output:\n")
@@ -20,7 +24,6 @@ def select_action(state, env, agent):
 
 
 def compare_model(model1, model2, n_battle=10):
-    global mcts 
     players = {1:model1, 2:model2}
     records = [0,0,0]  # model1 win, model2 win, draw
     comp_env = ConnectFourEnv()
@@ -32,9 +35,10 @@ def compare_model(model1, model2, n_battle=10):
             # 성능 평가이므로, noise를 주지 않음 
             turn = comp_env.player
             state_ = board_normalization(noise=False,env=comp_env, model_type='CNN')
+            state = torch.from_numpy(state_).float()
             
             if turn == 2:
-                state = torch.from_numpy(state_).float()
+                
                 
                 action = players[turn].select_action(state, comp_env, player=turn)
                 if isinstance(action, tuple):
@@ -67,7 +71,6 @@ def evaluate_model(model, record, n_battles=[10,10,10]):
 
 
 CF = ConnectFour()
-player = 1
 print("what the...")
 args = {
     'C': 2,
@@ -76,16 +79,18 @@ args = {
     'dirichlet_alpha': 0.3
 }
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = ResNet(CF, 3, 64, device)
-model.load_state_dict(torch.load("model_7_ConnectFour.pth", map_location=device))
+player = np.random.choice([1,-1])
+
+
+model = AlphaZeroResNet(3, 64).to(device)
+model.load_state_dict(torch.load("model/alphazero/model_1/model_1.pth", map_location=device))
 model.eval()
 
 mcts = MCTS(CF, args, model)
 
 state = CF.get_initial_state()
-player = np.random.choice([1,-1])
+
 
 
 # 수능처럼 점수를 계산하자

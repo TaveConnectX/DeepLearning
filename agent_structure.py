@@ -6,11 +6,11 @@ import math
 from collections import deque
 import torch
 from torch import nn, optim
+import torch.nn.functional as F
 import time
 import env
 import nashpy as nash
-from env import Tree, Node, compare_model
-from AlphaZeroenv import MCTS
+from env import MCTS, MCTSParallel, SPG
 from functions import board_normalization, \
     get_model_config, set_optimizer, \
     get_distinct_actions, is_full_after_my_turn, \
@@ -2080,116 +2080,301 @@ class MinimaxAgent():
         return move
 
 
-
-
-
-class AlphaZeroAgent:
-    def __init__(self, env, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):
-        self.env = env
-        self.model = AlphaZeroResNet()
-        self.use_conv = True
-        self.batch_size = batch_size
-        self.num_simulations = num_simulations
-        self.num_iterations = num_iterations
-        self.num_episodes = num_episodes
-
-        self.mcts = MCTS(self.env, self.model, self.num_simulations)
-        self.memory = []
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0003)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model.to(self.device)
-
-    def run_episode(self):
-        train_examples = []
+class AlphaZero:
+    def __init__(self, model, optimizer, game, args):
+        self.model = model
+        self.optimizer = optimizer
+        self.game = game
+        self.args = args
+        self.mcts = MCTS(game, args, model)
+        
+    def selfPlay(self):
+        memory = []
         player = 1
-        state = np.zeros((self.env.n_row, self.env.n_col))
-
+        state = self.game.get_initial_state()
+        
         while True:
-            # print(state)
-            perspective_state = self.env.get_perspective_state(state, player)
-
-            self.mcts = MCTS(self.env, self.model, self.num_simulations)
-            root = self.mcts.run(perspective_state, turn=1)
-
-            action_probs = np.zeros(self.env.action_size)
-            for key, value in root.children.items():
-                action_probs[key] = value.visit_count
-
-            action_probs = action_probs / np.sum(action_probs)
-            train_examples.append((perspective_state, action_probs, player))
-
-            action = root.select_action(temp=0)
-            state, player = self.env.get_next_state(state, action, player)
-
-            reward = self.env.is_done(state, player)
-
-            # 게임이 끝났다면
-            if reward is not None:
-                episode_record = []
-                for state, action_probs, prev_player in train_examples:
-                    reward_record = reward * (-1)**(prev_player != player)
-                    episode_record.append((state, action_probs, reward_record))
+            neutral_state = self.game.change_perspective(state, player)
+            action_probs = self.mcts.search(neutral_state)
             
-                return episode_record
+            memory.append((neutral_state, action_probs, player))
             
-
-    def train(self, epochs):
-        for iter in range(self.num_iterations):
-            print("iter:",iter)
-            for epi in range(self.num_episodes):
-                print("epi:",epi)
-                mem_epi = self.run_episode()
-                self.memory.extend(mem_epi)
-
-            random.shuffle(self.memory)
+            temperature_action_probs = action_probs ** (1 / self.args['temperature'])
+            temperature_action_probs = temperature_action_probs / temperature_action_probs.sum()
+            action = np.random.choice(self.game.action_size, p=temperature_action_probs) # change to temperature_action_probs
             
-            prob_losses, value_losses = [], []
-
-            for epoch in range(epochs):
-                print("epoch:",epoch)
-                batch_num = 0
-
-                while batch_num < int(len(self.memory) / self.batch_size):
-                    print("batch_num:", batch_num)
-                    sample_ids = np.random.randint(len(self.memory), size=self.batch_size)
-                    states, action_probs, values = list(zip(*[self.memory[i] for i in sample_ids]))
-
-                    states = torch.FloatTensor(np.array(states).astype(np.float64)).unsqueeze(1)
-                    target_probs = torch.FloatTensor(np.array(action_probs))
-                    target_values = torch.FloatTensor(np.array(values).astype(np.float64))
-
-                    states = states.contiguous().to(self.device)
-                    target_probs = target_probs.contiguous().to(self.device)
-                    target_values = target_values.contiguous().to(self.device)
-                    # print(states, states.shape)
-
-                    output_probs, output_values = self.model(states)
-                    loss_probs = self.get_loss_probs(target_probs, output_probs)
-                    loss_values = self.get_loss_values(target_values, output_values)
-                    loss = loss_probs + loss_values
-
-
-                    print("target_probs:", target_probs)
-                    print("output_probs:", output_probs)
-                    print("loss_probs: ", loss_probs)
-                    print("loss_values: ", loss_values)
-                    prob_losses.append(float(loss_probs))
-                    value_losses.append(float(loss_values))
-
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
-
-                    batch_num += 1
-
-                print()
-                print("policy loss: ", np.mean(prob_losses))
-                print("value loss: ", np.mean(value_losses))
-
-    def get_loss_probs(self, target_probs, output_probs):
-        return -(target_probs * torch.log(output_probs + np.finfo(float).eps)).mean()
+            state = self.game.get_next_state(state, action, player)
+            
+            value, is_terminal = self.game.get_value_and_terminated(state, action)
+            
+            if is_terminal:
+                returnMemory = []
+                for hist_neutral_state, hist_action_probs, hist_player in memory:
+                    hist_outcome = value if hist_player == player else self.game.get_opponent_value(value)
+                    returnMemory.append((
+                        self.game.get_encoded_state(hist_neutral_state),
+                        hist_action_probs,
+                        hist_outcome
+                    ))
+                return returnMemory
+            
+            player = self.game.get_opponent(player)
+                
+    def train(self, memory):
+        random.shuffle(memory)
+        for batchIdx in range(0, len(memory), self.args['batch_size']):
+            sample = memory[batchIdx:min(len(memory) - 1, batchIdx + self.args['batch_size'])] # Change to memory[batchIdx:batchIdx+self.args['batch_size']] in case of an error
+            state, policy_targets, value_targets = zip(*sample)
+            
+            state, policy_targets, value_targets = np.array(state), np.array(policy_targets), np.array(value_targets).reshape(-1, 1)
+            
+            state = torch.tensor(state, dtype=torch.float32, device=self.model.device)
+            policy_targets = torch.tensor(policy_targets, dtype=torch.float32, device=self.model.device)
+            value_targets = torch.tensor(value_targets, dtype=torch.float32, device=self.model.device)
+            
+            out_policy, out_value = self.model(state)
+            
+            policy_loss = F.cross_entropy(out_policy, policy_targets)
+            value_loss = F.mse_loss(out_value, value_targets)
+            loss = policy_loss + value_loss
+            
+            self.optimizer.zero_grad() # change to self.optimizer
+            loss.backward()
+            self.optimizer.step() # change to self.optimizer
     
-    def get_loss_values(self, target_values, output_values):
-        return torch.sum((target_values-output_values.view(-1))**2)/target_values.size()[0]
+    def learn(self):
+        for iteration in range(self.args['num_iterations']):
+            memory = []
+            
+            self.model.eval()
+            for selfPlay_iteration in range(self.args['num_selfPlay_iterations']):
+                print("num_selfplay_iterations: {}/{}".format(\
+                    selfPlay_iteration, self.args['num_selfPlay_iterations']
+                ))
+                memory += self.selfPlay()
+                
+            self.model.train()
+            for epoch in range(self.args['num_epochs']):
+                print("num_epochs: {}/{}".format(\
+                    epoch, self.args['num_epochs']
+                ))
+                self.train(memory)
+            
+            torch.save(self.model.state_dict(), f"model_{iteration}_{self.game}.pt")
+            torch.save(self.optimizer.state_dict(), f"optimizer_{iteration}_{self.game}.pt")
+
+class AlphaZeroParallel:
+    def __init__(self, model, optimizer, game, args):
+        self.model = model
+        self.optimizer = optimizer
+        self.game = game
+        self.args = args
+        self.mcts = MCTSParallel(game, args, model)
+        self.vlosses = []
+        self.plosses = []
+        self.losses = []
+        
+    def selfPlay(self):
+        return_memory = []
+        player = 1
+        spGames = [SPG(self.game) for spg in range(self.args['num_parallel_games'])]
+        
+        while len(spGames) > 0:
+            states = np.stack([spg.state for spg in spGames])
+            neutral_states = self.game.change_perspective(states, player)
+            
+            self.mcts.search(neutral_states, spGames)
+            
+            for i in range(len(spGames))[::-1]:
+                spg = spGames[i]
+                
+                action_probs = np.zeros(self.game.action_size)
+                for child in spg.root.children:
+                    action_probs[child.action_taken] = child.visit_count
+                action_probs /= np.sum(action_probs)
+
+                spg.memory.append((spg.root.state, action_probs, player))
+
+                temperature_action_probs = action_probs ** (1 / self.args['temperature'])
+                temperature_action_probs /= np.sum(temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
+                action = np.random.choice(self.game.action_size, p=temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
+
+                spg.state = self.game.get_next_state(spg.state, action, player)
+
+                value, is_terminal = self.game.get_value_and_terminated(spg.state, action)
+
+                if is_terminal:
+                    for hist_neutral_state, hist_action_probs, hist_player in spg.memory:
+                        hist_outcome = value if hist_player == player else self.game.get_opponent_value(value)
+                        return_memory.append((
+                            self.game.get_encoded_state(hist_neutral_state),
+                            hist_action_probs,
+                            hist_outcome
+                        ))
+                    del spGames[i]
+                    
+            player = self.game.get_opponent(player)
+            
+        return return_memory
+                
+    def train(self, memory):
+        random.shuffle(memory)
+        for batchIdx in range(0, len(memory), self.args['batch_size']):
+            sample = memory[batchIdx:min(len(memory) - 1, batchIdx + self.args['batch_size'])] # Change to memory[batchIdx:batchIdx+self.args['batch_size']] in case of an error
+            state, policy_targets, value_targets = zip(*sample)
+            
+            state, policy_targets, value_targets = np.array(state), np.array(policy_targets), np.array(value_targets).reshape(-1, 1)
+            
+            state = torch.tensor(state, dtype=torch.float32, device=self.model.device)
+            policy_targets = torch.tensor(policy_targets, dtype=torch.float32, device=self.model.device)
+            value_targets = torch.tensor(value_targets, dtype=torch.float32, device=self.model.device)
+            
+            out_policy, out_value = self.model(state)
+            policy_loss = F.cross_entropy(out_policy, policy_targets)
+            value_loss = F.mse_loss(out_value, value_targets)
+            loss = policy_loss + value_loss
+            
+            self.plosses.append(policy_loss.item())
+            self.vlosses.append(value_loss.item())
+            self.losses.append(loss.item())
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+    
+    def learn(self):
+        for iteration in range(self.args['num_iterations']):
+            print("num_iterations: {}/{}".format(\
+                    iteration+1, self.args['num_iterations']
+                ))
+            memory = []
+            
+            self.model.eval()
+            for selfPlay_iteration in range(self.args['num_selfPlay_iterations'] // self.args['num_parallel_games']):
+                print(" num_selfplay_iterations: {}/{}".format(\
+                    selfPlay_iteration+1, self.args['num_selfPlay_iterations'] // self.args['num_parallel_games']
+                ))
+                memory += self.selfPlay()
+                
+            self.model.train()
+            for epoch in range(self.args['num_epochs']):
+                print("    num_epochs: {}/{}".format(\
+                    epoch+1, self.args['num_epochs']
+                ))
+                self.train(memory)
+            
+            # torch.save(self.model.state_dict(), f"model_{iteration}_{self.game}.pth")
+            # torch.save(self.optimizer.state_dict(), f"optimizer_{iteration}_{self.game}.pth")
+  
+
+
+# class AlphaZeroAgent:
+#     def __init__(self, env, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):
+#         self.env = env
+#         self.model = AlphaZeroResNet()
+#         self.use_conv = True
+#         self.batch_size = batch_size
+#         self.num_simulations = num_simulations
+#         self.num_iterations = num_iterations
+#         self.num_episodes = num_episodes
+
+#         self.mcts = MCTS(self.env, self.model, self.num_simulations)
+#         self.memory = []
+#         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0003)
+#         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#         self.model.to(self.device)
+
+#     def run_episode(self):
+#         train_examples = []
+#         player = 1
+#         state = np.zeros((self.env.n_row, self.env.n_col))
+
+#         while True:
+#             # print(state)
+#             perspective_state = self.env.get_perspective_state(state, player)
+
+#             self.mcts = MCTS(self.env, self.model, self.num_simulations)
+#             root = self.mcts.run(perspective_state, turn=1)
+
+#             action_probs = np.zeros(self.env.action_size)
+#             for key, value in root.children.items():
+#                 action_probs[key] = value.visit_count
+
+#             action_probs = action_probs / np.sum(action_probs)
+#             train_examples.append((perspective_state, action_probs, player))
+
+#             action = root.select_action(temp=0)
+#             state, player = self.env.get_next_state(state, action, player)
+
+#             reward = self.env.is_done(state, player)
+
+#             # 게임이 끝났다면
+#             if reward is not None:
+#                 episode_record = []
+#                 for state, action_probs, prev_player in train_examples:
+#                     reward_record = reward * (-1)**(prev_player != player)
+#                     episode_record.append((state, action_probs, reward_record))
+            
+#                 return episode_record
+            
+
+#     def train(self, epochs):
+#         for iter in range(self.num_iterations):
+#             print("iter:",iter)
+#             for epi in range(self.num_episodes):
+#                 print("epi:",epi)
+#                 mem_epi = self.run_episode()
+#                 self.memory.extend(mem_epi)
+
+#             random.shuffle(self.memory)
+            
+#             prob_losses, value_losses = [], []
+
+#             for epoch in range(epochs):
+#                 print("epoch:",epoch)
+#                 batch_num = 0
+
+#                 while batch_num < int(len(self.memory) / self.batch_size):
+#                     print("batch_num:", batch_num)
+#                     sample_ids = np.random.randint(len(self.memory), size=self.batch_size)
+#                     states, action_probs, values = list(zip(*[self.memory[i] for i in sample_ids]))
+
+#                     states = torch.FloatTensor(np.array(states).astype(np.float64)).unsqueeze(1)
+#                     target_probs = torch.FloatTensor(np.array(action_probs))
+#                     target_values = torch.FloatTensor(np.array(values).astype(np.float64))
+
+#                     states = states.contiguous().to(self.device)
+#                     target_probs = target_probs.contiguous().to(self.device)
+#                     target_values = target_values.contiguous().to(self.device)
+#                     # print(states, states.shape)
+
+#                     output_probs, output_values = self.model(states)
+#                     loss_probs = self.get_loss_probs(target_probs, output_probs)
+#                     loss_values = self.get_loss_values(target_values, output_values)
+#                     loss = loss_probs + loss_values
+
+
+#                     print("target_probs:", target_probs)
+#                     print("output_probs:", output_probs)
+#                     print("loss_probs: ", loss_probs)
+#                     print("loss_values: ", loss_values)
+#                     prob_losses.append(float(loss_probs))
+#                     value_losses.append(float(loss_values))
+
+#                     self.optimizer.zero_grad()
+#                     loss.backward()
+#                     self.optimizer.step()
+
+#                     batch_num += 1
+
+#                 print()
+#                 print("policy loss: ", np.mean(prob_losses))
+#                 print("value loss: ", np.mean(value_losses))
+
+#     def get_loss_probs(self, target_probs, output_probs):
+#         return -(target_probs * torch.log(output_probs + np.finfo(float).eps)).mean()
+    
+#     def get_loss_values(self, target_values, output_values):
+#         return torch.sum((target_values-output_values.view(-1))**2)/target_values.size()[0]
     
 

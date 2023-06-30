@@ -11,7 +11,6 @@ import time
 # import torch.nn.init as init
 # import torch.nn.functional as F
 from models import *
-from AlphaZeroenv import MCTS, CFEnvforAlphaZero
 from functions import get_valid_actions, get_next_board
 
 # models = {
@@ -234,66 +233,7 @@ class ConnectFourEnv:
         print("+" + "-" * (len(board[0]) * 2 - 1) + "+")
         print("player {}'s turn!".format(int(self.player)))
 
-    # (x,y) 에서 8방향으로 적절한 좌표 3개를 제공 
-    # def coor_for_8_direction(self, x, y):
-    #     coors = []
-    #     left, right, up, down = (False,)*4
-    #     # (x,y) 기준 오른쪽
-    #     if y+3<self.n_col:
-    #         right=True
-    #         coors.append(((x,y+1),(x,y+2),(x,y+3)))
-    #     # (x,y) 기준 왼쪽
-    #     if y-3>=0:
-    #         left=True
-    #         coors.append(((x,y-1),(x,y-2),(x,y-3)))
-    #     # (x,y) 기준 위 
-    #     if x-3>=0:
-    #         up=True
-    #         coors.append(((x-1,y),(x-2,y),(x-3,y)))
-    #     # (x,y) 기준 아래 
-    #     if x+3<self.n_row:
-    #         down=True
-    #         coors.append(((x+1,y),(x+2,y),(x+3,y)))
-    #     # (x,y) 기준 오른쪽 위 
-    #     if right and up:
-    #         coors.append(((x-1,y+1),(x-2,y+2),(x-3,y+3)))
-    #     # (x,y) 기준 오른쪽 아래 
-    #     if right and down:
-    #         coors.append(((x+1,y+1),(x+2,y+2),(x+3,y+3)))
-    #     # (x,y) 기준 왼쪽 위 
-    #     if left and up:
-    #         coors.append(((x-1,y-1),(x-2,y-2),(x-3,y-3)))
-    #     # (x,y) 기준 왼쪽 아래 
-    #     if left and down:
-    #         coors.append(((x+1,y-1),(x+2,y-2),(x+3,y-3)))
-
-    #     return coors 
-
-
-    # 승패가 결정됐는지 확인하는 함수
-    # 0: not end
-    # 1: player 1 win
-    # 2: player 2 win
-    # 3: draw 
-    # def check_win(self):
-
-    #     for x in range(self.n_row-1,-1,-1):
-    #         for y in range(self.n_col):
-    #             piece = self.board[x][y]
-    #             if piece == 0: continue
-
-    #             coor_list = self.coor_for_8_direction(x,y)
-    #             for coors in coor_list:
-    #                 # print("coors:",coors)
-    #                 if piece == self.board[coors[0]] == self.board[coors[1]] == self.board[coors[2]]:
-    #                     self.win = piece
-    #                     self.done = True
-    #                     return
-
-    #     if not 0 in self.board[0,:]:
-    #         self.win = 3
-        
-    #     if self.win != 0: self.done = True
+    
 
     # made by chatgpt and I edit little bit.
     # 가로, 세로, 대각선에 완성된 줄이 있는지를 체크한다 
@@ -340,37 +280,299 @@ class ConnectFourEnv:
         self.step(np.random.choice(range(self.n_col)))
         self.print_board()
 
+# ConnectFourEnv와는 다르게 게임 규칙만 들어가 있음 
+# player는 1과 -1로 이루어져 있으므로 정규화할 필요 없음 
+# self play 이므로 초기 player를 랜덤으로 둘 필요 없음 
+# action은 one-hot encoding 된 상태로 받음 ex. [0,0,1,0,0,0,0]
+
+class ConnectFour:
+    def __init__(self):
+        self.row_count = 6
+        self.column_count = 7
+        self.action_size = self.column_count
+        self.in_a_row = 4
+        
+    def __repr__(self):
+        return "ConnectFour"
+        
+    def get_initial_state(self):
+        return np.zeros((self.row_count, self.column_count))
+    
+    def get_next_state(self, state, action, player):
+        row = np.max(np.where(state[:, action] == 0))
+        state[row, action] = player
+        return state
+    
+    def get_valid_moves(self, state):
+        return (state[0] == 0).astype(np.uint8)
+    
+    def check_win(self, state, action):
+        if action == None:
+            return False
+        
+        row = np.min(np.where(state[:, action] != 0))
+        column = action
+        player = state[row][column]
+
+        def count(offset_row, offset_column):
+            for i in range(1, self.in_a_row):
+                r = row + offset_row * i
+                c = action + offset_column * i
+                if (
+                    r < 0 
+                    or r >= self.row_count
+                    or c < 0 
+                    or c >= self.column_count
+                    or state[r][c] != player
+                ):
+                    return i - 1
+            return self.in_a_row - 1
+
+        return (
+            count(1, 0) >= self.in_a_row - 1 # vertical
+            or (count(0, 1) + count(0, -1)) >= self.in_a_row - 1 # horizontal
+            or (count(1, 1) + count(-1, -1)) >= self.in_a_row - 1 # top left diagonal
+            or (count(1, -1) + count(-1, 1)) >= self.in_a_row - 1 # top right diagonal
+        )
+    
+    def get_value_and_terminated(self, state, action):
+        if self.check_win(state, action):
+            return 1, True
+        if np.sum(self.get_valid_moves(state)) == 0:
+            return 0, True
+        return 0, False
+    
+    def get_opponent(self, player):
+        return -player
+    
+    def get_opponent_value(self, value):
+        return -value
+    
+    def change_perspective(self, state, player):
+        return state * player
+    
+    def get_encoded_state(self, state):
+        encoded_state = np.stack(
+            (state == -1, state == 0, state == 1)
+        ).astype(np.float32)
+        
+        if len(state.shape) == 3:
+            encoded_state = np.swapaxes(encoded_state, 0, 1)
+        
+        return encoded_state
+    
+
+class Node:
+    def __init__(self, game, args, state, parent=None, action_taken=None, prior=0, visit_count=0):
+        self.game = game
+        self.args = args
+        self.state = state
+        self.parent = parent
+        self.action_taken = action_taken
+        self.prior = prior
+        
+        self.children = []
+        
+        self.visit_count = visit_count
+        self.value_sum = 0
+        
+    def is_fully_expanded(self):
+        return len(self.children) > 0
+    
+    def select(self):
+        best_child = None
+        best_ucb = -np.inf
+        
+        for child in self.children:
+            ucb = self.get_ucb(child)
+            if ucb > best_ucb:
+                best_child = child
+                best_ucb = ucb
+                
+        return best_child
+    
+    def get_ucb(self, child):
+        if child.visit_count == 0:
+            q_value = 0
+        else:
+            q_value = 1 - ((child.value_sum / child.visit_count) + 1) / 2
+        return q_value + self.args['C'] * (math.sqrt(self.visit_count) / (child.visit_count + 1)) * child.prior
+    
+    def expand(self, policy):
+        for action, prob in enumerate(policy):
+            if prob > 0:
+                child_state = self.state.copy()
+                child_state = self.game.get_next_state(child_state, action, 1)
+                child_state = self.game.change_perspective(child_state, player=-1)
+
+                child = Node(self.game, self.args, child_state, self, action, prob)
+                self.children.append(child)
+                
+        return child
+            
+    def backpropagate(self, value):
+        self.value_sum += value
+        self.visit_count += 1
+        
+        value = self.game.get_opponent_value(value)
+        if self.parent is not None:
+            self.parent.backpropagate(value)  
 
 
-class Node():
-    def __init__(self, data=None, children={}, player=None):
-        self.data = data
-        self.parent = None
-        self.children = children
-        self.player = None
+class MCTS:
+    def __init__(self, game, args, model):
+        self.game = game
+        self.args = args
+        self.model = model
+        
+    @torch.no_grad()
+    def search(self, state):
+        root = Node(self.game, self.args, state, visit_count=1)
+        
+        policy, _ = self.model(
+            torch.tensor(self.game.get_encoded_state(state), device=self.model.device).unsqueeze(0)
+        )
+        policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
+        policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
+            * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
+        
+        valid_moves = self.game.get_valid_moves(state)
+        policy *= valid_moves
+        policy /= np.sum(policy)
+        root.expand(policy)
+        
+        for search in range(self.args['num_searches']):
+            node = root
+            
+            while node.is_fully_expanded():
+                node = node.select()
+                
+            value, is_terminal = self.game.get_value_and_terminated(node.state, node.action_taken)
+            value = self.game.get_opponent_value(value)
+            
+            if not is_terminal:
+                policy, value = self.model(
+                    torch.tensor(self.game.get_encoded_state(node.state), device=self.model.device).unsqueeze(0)
+                )
+                policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
+                valid_moves = self.game.get_valid_moves(node.state)
+                policy *= valid_moves
+                policy /= np.sum(policy)
+                
+                value = value.item()
+                
+                node.expand(policy)
+                
+            node.backpropagate(value)    
+            
+            
+        action_probs = np.zeros(self.game.action_size)
+        for child in root.children:
+            action_probs[child.action_taken] = child.visit_count
+        action_probs /= np.sum(action_probs)
+        return action_probs
+    
+class MCTSParallel:
+    def __init__(self, game, args, model):
+        self.game = game
+        self.args = args
+        self.model = model
+        
+    @torch.no_grad()
+    def search(self, states, spGames):
+        # print(self.game.get_encoded_state(states).shape)
+        policy, _ = self.model(
+            torch.tensor(self.game.get_encoded_state(states), device=self.model.device)
+        )
+        policy = torch.softmax(policy, axis=1).cpu().numpy()
+        policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
+            * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size, size=policy.shape[0])
+        
+        for i, spg in enumerate(spGames):
+            spg_policy = policy[i]
+            valid_moves = self.game.get_valid_moves(states[i])
+            spg_policy *= valid_moves
+            spg_policy /= np.sum(spg_policy)
+
+            spg.root = Node(self.game, self.args, states[i], visit_count=1)
+            spg.root.expand(spg_policy)
+        
+        for search in range(self.args['num_searches']):
+            for spg in spGames:
+                spg.node = None
+                node = spg.root
+
+                while node.is_fully_expanded():
+                    node = node.select()
+
+                value, is_terminal = self.game.get_value_and_terminated(node.state, node.action_taken)
+                value = self.game.get_opponent_value(value)
+                
+                if is_terminal:
+                    node.backpropagate(value)
+                    
+                else:
+                    spg.node = node
+                    
+            expandable_spGames = [mappingIdx for mappingIdx in range(len(spGames)) if spGames[mappingIdx].node is not None]
+                    
+            if len(expandable_spGames) > 0:
+                states = np.stack([spGames[mappingIdx].node.state for mappingIdx in expandable_spGames])
+                
+                policy, value = self.model(
+                    torch.tensor(self.game.get_encoded_state(states), device=self.model.device)
+                )
+                policy = torch.softmax(policy, axis=1).cpu().numpy()
+                value = value.cpu().numpy()
+                
+            for i, mappingIdx in enumerate(expandable_spGames):
+                node = spGames[mappingIdx].node
+                spg_policy, spg_value = policy[i], value[i]
+                
+                valid_moves = self.game.get_valid_moves(node.state)
+                spg_policy *= valid_moves
+                spg_policy /= np.sum(spg_policy)
+
+                node.expand(spg_policy)
+                node.backpropagate(spg_value)
 
 
-class Tree():
-    def __init__(self, state=None):
-        self.root = Node(data=state)
-        self.cur = self.root
+class SPG:
+    def __init__(self, game):
+        self.state = game.get_initial_state()
+        self.memory = []
+        self.root = None
+        self.node = None
 
-    def branch(self, node):
-        valid_actions = get_valid_actions(node.data)
-        for action in valid_actions:
-            next_board = get_next_board(node.data, action)
-            node.children[action] = Node(next_board, player=2//node.player)
-            node.children[action].parent = node
+# class Node():
+#     def __init__(self, data=None, children={}, player=None):
+#         self.data = data
+#         self.parent = None
+#         self.children = children
+#         self.player = None
 
-    def set_root(self, node):
-        node.parent = None
-        self.root = node
-        self.cur = self.root
 
-    def get_root(self):
-        self.cur = self.root
+# class Tree():
+#     def __init__(self, state=None):
+#         self.root = Node(data=state)
+#         self.cur = self.root
 
-    def get_parent(self):
-        self.cur = self.cur.parent
+#     def branch(self, node):
+#         valid_actions = get_valid_actions(node.data)
+#         for action in valid_actions:
+#             next_board = get_next_board(node.data, action)
+#             node.children[action] = Node(next_board, player=2//node.player)
+#             node.children[action].parent = node
+
+#     def set_root(self, node):
+#         node.parent = None
+#         self.root = node
+#         self.cur = self.root
+
+#     def get_root(self):
+#         self.cur = self.root
+
+#     def get_parent(self):
+#         self.cur = self.cur.parent
 
 

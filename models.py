@@ -219,7 +219,7 @@ class AlphaZeroResNet(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_name = 'AlphaZero-ResNet-v1'
         self.start_block = nn.Sequential(
-            nn.Conv2d(1, num_hidden, kernel_size=3, padding=1),
+            nn.Conv2d(3, num_hidden, kernel_size=3, padding=1),
             nn.BatchNorm2d(num_hidden),
             nn.ReLU()
         )
@@ -280,7 +280,7 @@ class ResBlock(nn.Module):
         )
 
     def forward(self, x):
-        return self.block(x) + x
+        return F.relu(self.block(x) + x)
     
 
 class DQNModel:
