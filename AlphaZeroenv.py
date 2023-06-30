@@ -10,8 +10,8 @@ import numpy as np
 # action은 one-hot encoding 된 상태로 받음 ex. [0,0,1,0,0,0,0]
 class CFEnvforAlphaZero:
     def __init__(self, row=6, col=7, action_size=7):
-        self.row = row
-        self.col = col
+        self.n_row = row
+        self.n_col = col
         self.board = np.zeros((row, col))
         self.action_size = action_size
 
@@ -23,7 +23,7 @@ class CFEnvforAlphaZero:
             print("1:this cannot be happened")
         else:
             # piece를 둠 
-            for row in range(self.row-1,-1,-1):
+            for row in range(self.n_row-1,-1,-1):
                 if board[row][col] == 0:
                     board[row][col] = player
                     break
@@ -35,20 +35,20 @@ class CFEnvforAlphaZero:
         return np.where(state[0] == 0, 1, 0)
     
     def is_done(self, state, player):
-        for i in range(self.row):
-            for j in range(self.col):
+        for i in range(self.n_row):
+            for j in range(self.n_col):
                 if state[i][j] == player:
                     # horizontal
-                    if j + 3 < self.col and state[i][j+1] == state[i][j+2] == state[i][j+3] == player:
+                    if j + 3 < self.n_col and state[i][j+1] == state[i][j+2] == state[i][j+3] == player:
                         return player
                     # vertical
-                    if i + 3 < self.row and state[i+1][j] == state[i+2][j] == state[i+3][j] == player:
+                    if i + 3 < self.n_row and state[i+1][j] == state[i+2][j] == state[i+3][j] == player:
                         return player
                     # diagonal (down right)
-                    if i + 3 < self.row and j + 3 < self.col and state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3] == player:
+                    if i + 3 < self.n_row and j + 3 < self.n_col and state[i+1][j+1] == state[i+2][j+2] == state[i+3][j+3] == player:
                         return player
                     # diagonal (up right)
-                    if i - 3 >= 0 and j + 3 < self.col and state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3] == player:
+                    if i - 3 >= 0 and j + 3 < self.n_col and state[i-1][j+1] == state[i-2][j+2] == state[i-3][j+3] == player:
                         return player
     
         

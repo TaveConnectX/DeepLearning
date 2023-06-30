@@ -10,6 +10,7 @@ import time
 import env
 import nashpy as nash
 from env import Tree, Node, compare_model
+from AlphaZeroenv import MCTS
 from functions import board_normalization, \
     get_model_config, set_optimizer, \
     get_distinct_actions, is_full_after_my_turn, \
@@ -18,7 +19,8 @@ from ReplayBuffer import RandomReplayBuffer
 # models.py 분리 후 이동, 정상 작동하면 지울 듯 
 # import torch.nn.init as init
 # import torch.nn.functional as F
-from models import DQNModel, HeuristicModel, RandomModel, MinimaxModel
+from models import DQNModel, HeuristicModel, RandomModel, MinimaxModel, \
+                    AlphaZeroResNet
 import json
 
 # editable hyperparameters
@@ -2084,7 +2086,8 @@ class MinimaxAgent():
 class AlphaZeroAgent:
     def __init__(self, env, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):
         self.env = env
-        self.model = models[model_num]()
+        self.model = AlphaZeroResNet()
+        self.use_conv = True
         self.batch_size = batch_size
         self.num_simulations = num_simulations
         self.num_iterations = num_iterations
@@ -2099,10 +2102,10 @@ class AlphaZeroAgent:
     def run_episode(self):
         train_examples = []
         player = 1
-        state = np.zeros((self.env.row, self.env.col))
+        state = np.zeros((self.env.n_row, self.env.n_col))
 
         while True:
-            print(state)
+            # print(state)
             perspective_state = self.env.get_perspective_state(state, player)
 
             self.mcts = MCTS(self.env, self.model, self.num_simulations)

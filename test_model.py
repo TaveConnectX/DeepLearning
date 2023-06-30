@@ -1,4 +1,5 @@
 import env
+import AlphaZeroenv
 import numpy as np
 import torch
 import time
@@ -6,10 +7,14 @@ import os
 import copy
 import random
 import keyboard
-from agent_structure import ConnectFourDQNAgent, MinimaxAgent
+from agent_structure import ConnectFourDQNAgent, MinimaxAgent, AlphaZeroAgent
 from functions import get_model_config, get_model_and_config_name
+
+
+
 import lovely_tensors as lt
 lt.monkey_patch()
+
 X_mark = "\033[31mX\033[0m"
 O_mark = "\033[33mO\033[0m"
 
@@ -54,7 +59,7 @@ def print_board_while_gaming(env, pointer, board=None):
 
 
 
-CF = env.ConnectFourEnv()
+CF = env.ConnectFourEnv() 
 mode = input("to play with human, type 'human'(else just enter):")
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -74,8 +79,10 @@ kwargs={
 }
 agent = ConnectFourDQNAgent(**kwargs)
 agent.eps = 0
+
 agent.policy_net.load_state_dict(torch.load('model/model_for_play/'+model_name, map_location=device))
-agent.update_target_net()   
+agent.update_target_net() 
+  
 
 # agent = MinimaxAgent()
 pointer = 3

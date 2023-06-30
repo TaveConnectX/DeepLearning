@@ -13,10 +13,10 @@ import os
 
 
 
-CFenv = AlphaZeroenv.CFEnvforAlphaZero()  # connext4 환경 생성
+CFenv = AlphaZeroenv.CFEnvforAlphaZero()  # connect4 환경 생성
 agent = AlphaZeroAgent(env=CFenv, num_simulations=343, num_iterations=10, num_episodes=10, batch_size=16)
 
-agent.train(epochs=2)
+agent.train(epochs=100)
 
 # 모델을 pth 파일로 저장
 def save_model(model, filename='alphazero'):
