@@ -98,7 +98,7 @@ for i in range(0, total_count) :
     state = torch.from_numpy(state_).float()
 
     use_rl = False  # RL 에이전트를 사용할 턴인지 여부
-    rl_start_turn = random.randint(15, 20)  # RL 에이전트를 사용하기 시작하는 턴 (랜덤으로 지정)
+    rl_start_turn = random.randint(1, 20)  # RL 에이전트를 사용하기 시작하는 턴 (랜덤으로 지정)
     
     for turn in range(1, 41):
         #print("Turn:", turn)
@@ -126,9 +126,9 @@ for i in range(0, total_count) :
 
         # RL 에이전트 사용 여부 결정
         if turn == rl_start_turn:
-            important_state = state
+            important_state = state[:]
             use_rl = True
-            print(turn,important_state)
+            #print(turn,important_state)
         
         if (use_rl == False) :
             important_state = state
@@ -153,6 +153,7 @@ for i in range(0, total_count) :
             tmp = list()
             tmp_forlist = list()
             # 데이터 가공 형식에 맞게 변형
+            print(important_state)
             tmp_forlist.append(important_state)
             tmp.append(tmp_forlist)
             # reword값을 각각의 배열로 변경
@@ -167,12 +168,12 @@ for i in range(0, total_count) :
             break
 
 # 데이터 잘 수집되었는지 확인 
-# for i,d in enumerate(data) :
-#     # print(i, d)
-#     b = np.array(d[0])  # board
-#     cnt = np.count_nonzero(b) # 0이 아닌 수의 개수 
-#     r = d[1]  # result: win lose draw
-#     print(cnt,b,r)
+for i,d in enumerate(data) :
+    # print(i, d)
+    b = np.array(d[0])  # board
+    cnt = np.count_nonzero(b) # 0이 아닌 수의 개수 
+    r = d[1]  # result: win lose draw
+    print(cnt,b,r)
 
 # 학습
 for i in range(0, learn_count) :
