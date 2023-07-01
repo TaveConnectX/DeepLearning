@@ -96,7 +96,7 @@ SL_agent.eps, RL_agent.eps = 0.05, 0.05  # 되도록 greedy 한 action을 취하
 VEnv = env.ConnectFourEnv()
 
 # 전역변수 설정
-total_count = 10000
+total_count = 30000
 learn_count = int(total_count * 0.8)
 test_count = total_count - learn_count
 
@@ -238,3 +238,4 @@ for i in range(learn_count, len(data)) :
 print("percent : " + str(count/test_count*100))
 
 # percent : 79.0 (8000학습 + 2000테스트)
+# percent : 83.8 (24000학습 + 6000테스트)
