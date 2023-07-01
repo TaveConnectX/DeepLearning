@@ -35,21 +35,35 @@ data = [
 '''
 
 # 신경망 모델 정의
+# 1층 짜리 모델
+# class Classifier(nn.Module):
+#     def __init__(self):
+#         super(Classifier, self).__init__()
+#         self.fc = nn.Linear(42, 3)  # 입력 크기: 7, 출력 크기: 클래스 수
+
+#     def forward(self, x):
+#         x = x.view(x.size(0), -1)  # 2차원 배열을 1차원으로 평탄화
+#         x = self.fc(x)
+#         return x
+
 class Classifier(nn.Module):
     def __init__(self):
         super(Classifier, self).__init__()
-        self.fc = nn.Linear(42, 3)  # 입력 크기: 7, 출력 크기: 클래스 수
+        self.fc1 = nn.Linear(42, 84)  # 입력 크기: 42, 출력 크기: 임의로 설정한 중간 층 크기
+        self.fc2 = nn.Linear(84, 3)  # 입력 크기: 중간 층 크기, 출력 크기: 클래스 수
+        self.relu = nn.ReLU()
 
     def forward(self, x):
         x = x.view(x.size(0), -1)  # 2차원 배열을 1차원으로 평탄화
-        x = self.fc(x)
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
         return x
 
 # 모델 인스턴스 생성
 model = Classifier()
 
 # 손실 함수 및 최적화 기법 정의
-criterion = nn.BCEWithLogitsLoss()
+criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=0.01)
 
 # Value Network를 구현하기 위한 모델들은 model/models_for_V_net에 저장되어 있음
@@ -82,7 +96,7 @@ SL_agent.eps, RL_agent.eps = 0.05, 0.05  # 되도록 greedy 한 action을 취하
 VEnv = env.ConnectFourEnv()
 
 # 전역변수 설정
-total_count = 30000
+total_count = 10000
 learn_count = int(total_count * 0.8)
 test_count = total_count - learn_count
 
@@ -223,5 +237,4 @@ for i in range(learn_count, len(data)) :
 # 최종 정확도 출력
 print("percent : " + str(count/test_count*100))
 
-# percent : 70.19999999999999 (8000학습 + 2000테스트)
-# percent : 75.11666666666666 (24000학습 + 6000테스트)
+# percent : 79.0 (8000학습 + 2000테스트)
