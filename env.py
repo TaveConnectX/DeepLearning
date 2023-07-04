@@ -395,6 +395,7 @@ class Node:
         if child.visit_count == 0:
             q_value = 0
         else:
+            # child와 parent는 적이므로 1에서 빼주기로 한다 
             q_value = 1 - ((child.value_sum / child.visit_count) + 1) / 2
         return q_value + self.args['C'] * (math.sqrt(self.visit_count) / (child.visit_count + 1)) * child.prior
     
@@ -402,10 +403,18 @@ class Node:
         for action, prob in enumerate(policy):
             if prob > 0:
                 child_state = self.state.copy()
+                # 내가 두는 건 항상 1, child 는 -1이면 뭔가 이상한데,,,
                 child_state = self.game.get_next_state(child_state, action, 1)
                 child_state = self.game.change_perspective(child_state, player=-1)
-
-                child = Node(self.game, self.args, child_state, self, action, prob)
+                # game, args, state, parent=None, action_taken=None, prior=0, visit_count=0
+                child = Node(
+                    game=self.game, 
+                    args=self.args, 
+                    state=child_state, 
+                    parent=self, 
+                    action_taken=action, 
+                    prior=prob
+                )
                 self.children.append(child)
                 
         return child
@@ -452,7 +461,10 @@ class MCTS:
             
             if not is_terminal:
                 policy, value = self.model(
-                    torch.tensor(self.game.get_encoded_state(node.state), device=self.model.device).unsqueeze(0)
+                    torch.tensor(
+                        self.game.get_encoded_state(node.state), 
+                        device=self.model.device
+                    ).unsqueeze(0)
                 )
                 policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
                 valid_moves = self.game.get_valid_moves(node.state)
@@ -467,6 +479,7 @@ class MCTS:
             
             
         action_probs = np.zeros(self.game.action_size)
+        # action prob은 방문 횟수에 비례하도록 정한다 
         for child in root.children:
             action_probs[child.action_taken] = child.visit_count
         action_probs /= np.sum(action_probs)
@@ -478,6 +491,7 @@ class MCTSParallel:
         self.args = args
         self.model = model
         
+    # search 과정이므로 gradiant를 계산할 필요가 없음 
     @torch.no_grad()
     def search(self, states, spGames):
         # print(self.game.get_encoded_state(states).shape)
@@ -485,9 +499,12 @@ class MCTSParallel:
             torch.tensor(self.game.get_encoded_state(states), device=self.model.device)
         )
         policy = torch.softmax(policy, axis=1).cpu().numpy()
+        # policy: 1-deps, dirichlet distribution(alpha): deps 만큼 
         policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
             * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size, size=policy.shape[0])
         
+
+        # 게임마다 root를 만들어준다. 
         for i, spg in enumerate(spGames):
             spg_policy = policy[i]
             valid_moves = self.game.get_valid_moves(states[i])
@@ -497,11 +514,13 @@ class MCTSParallel:
             spg.root = Node(self.game, self.args, states[i], visit_count=1)
             spg.root.expand(spg_policy)
         
+
         for search in range(self.args['num_searches']):
             for spg in spGames:
                 spg.node = None
                 node = spg.root
 
+                # score를 이용해서 다음 노드를 고른다.
                 while node.is_fully_expanded():
                     node = node.select()
 
@@ -514,17 +533,25 @@ class MCTSParallel:
                 else:
                     spg.node = node
                     
-            expandable_spGames = [mappingIdx for mappingIdx in range(len(spGames)) if spGames[mappingIdx].node is not None]
+            # 확장 가능한 게임들의 index 
+            expandable_spGames = [ 
+                mappingIdx for mappingIdx in range(len(spGames)) 
+                if spGames[mappingIdx].node is not None
+            ]
                     
+            # 확장 가능한게 존재한다면,
             if len(expandable_spGames) > 0:
+                # 그 state 들을 쌓아서
                 states = np.stack([spGames[mappingIdx].node.state for mappingIdx in expandable_spGames])
                 
+                # 한번에 모델에 집어 넣음 
                 policy, value = self.model(
                     torch.tensor(self.game.get_encoded_state(states), device=self.model.device)
                 )
                 policy = torch.softmax(policy, axis=1).cpu().numpy()
                 value = value.cpu().numpy()
                 
+
             for i, mappingIdx in enumerate(expandable_spGames):
                 node = spGames[mappingIdx].node
                 spg_policy, spg_value = policy[i], value[i]

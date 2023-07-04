@@ -7,30 +7,69 @@ from env import ConnectFourEnv, board_normalization, ConnectFour, MCTS
 from models import AlphaZeroResNet
 import numpy as np
 import torch
+import random
+import os 
+
+
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+use_search = True
+
+CF = ConnectFour()
+print("what the...")
+args = {
+    'C': 10,
+    'num_searches': 343,
+    'dirichlet_epsilon': 0.,
+    'dirichlet_alpha': 0.3
+}
 
 
-def select_action(state, env, agent):
-    print("output:\n")
-    print("a prob:", agent.model(state)[0])
-    print("value:", agent.model(state)[1])
-    action_prob = agent.model(state)[0].detach().cpu().numpy()
-    valid_actions = env.get_valid_actions(state[0][0].detach().cpu().numpy())
-    action_prob *= valid_actions
-    print(action_prob)
-    action = np.argmax(action_prob)
-    return action
+player = np.random.choice([1,-1])
+
+
+model = AlphaZeroResNet(5, 128).to(device)
+model.load_state_dict(torch.load("model/alphazero/model_6/model_6_iter_2.pth", map_location=device))
+model.eval()
+
+mcts = MCTS(CF, args, model)
+
+# state = CF.get_initial_state()
+
+def seed_everything(seed: int = 42):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    random.seed(seed)
+    np.random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    if device == "cuda:0":
+        torch.cuda.manual_seed(seed)  # type: ignore
+        torch.cuda.manual_seed_all(seed)
+        # 이건 학습 속도가 줄어든다고 함 
+        torch.backends.cudnn.deterministic = False  # type: ignore
+        torch.backends.cudnn.benchmark = False  # type: ignore
+
+seed_everything()
+
+
+def get_encoded_state(state):
+    encoded_state = np.stack(
+        (state == -1, state == 0, state == 1)
+    ).astype(np.float32)
+    
+    return encoded_state
+
 
 
 def compare_model(model1, model2, n_battle=10):
     players = {1:model1, 2:model2}
     records = [0,0,0]  # model1 win, model2 win, draw
     comp_env = ConnectFourEnv()
-
+    
     for round in range(n_battle):
         comp_env.reset()
-
+        a_cnt = 0
         while not comp_env.done:
             # 성능 평가이므로, noise를 주지 않음 
             turn = comp_env.player
@@ -45,8 +84,23 @@ def compare_model(model1, model2, n_battle=10):
                     action = action[0]
                 
             else:
-                mcts_probs = mcts.search(state_)
-                action = np.argmax(mcts_probs)
+                a_cnt += 1
+                # print("{},{}prev".format(round,a_cnt))
+                if not use_search:
+                    encoded_state =  torch.tensor(get_encoded_state(state), device=device).unsqueeze(0)
+                    action_probs, value = players[turn](encoded_state)
+                    valid_moves = (state_[0] == 0).astype(np.uint8)
+                    
+                    action_probs = action_probs.detach().cpu().numpy() * valid_moves
+                    action_probs /= np.sum(action_probs)
+                    # print(state_)
+                    # print(np.round(action_probs,3), value)
+                    action = np.argmax(action_probs)
+                
+                else:
+                    mcts_probs = mcts.search(state_)
+                    action = np.argmax(mcts_probs)
+                # print("{}after".format(a_cnt))
                 # print(mcts_probs, action)
 
             comp_env.step(action)
@@ -70,27 +124,6 @@ def evaluate_model(model, record, n_battles=[10,10,10]):
     record[2].append(w+d)
 
 
-CF = ConnectFour()
-print("what the...")
-args = {
-    'C': 2,
-    'num_searches': 600,
-    'dirichlet_epsilon': 0.,
-    'dirichlet_alpha': 0.3
-}
-
-
-player = np.random.choice([1,-1])
-
-
-model = AlphaZeroResNet(3, 64).to(device)
-model.load_state_dict(torch.load("model/alphazero/model_1/model_1.pth", map_location=device))
-model.eval()
-
-mcts = MCTS(CF, args, model)
-
-state = CF.get_initial_state()
-
 
 
 # 수능처럼 점수를 계산하자
@@ -108,15 +141,18 @@ n_battles = [3,14,13]
 records = [[],[],[]]
 scores = []
 for i in range(num_tests):
-    print(i, scores)
+    
+    
     evaluate_model(model, records, n_battles=n_battles)
     twos = records[0][-1]
     threes = records[1][-1]
     fours = records[2][-1]
+    print(records[0][-1], records[1][-1], records[2][-1])
 
     scores.append(twos*2+threes*3+fours*4)
+    print(i, scores)
 
 print(records)
 print(max(scores))
 print(min(scores))
-print(sum(scores)/len(scores))
+print("avg:",sum(scores)/len(scores))

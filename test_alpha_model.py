@@ -17,6 +17,11 @@ from functions import get_model_config, get_model_and_config_name,\
 X_mark = "\033[31mX\033[0m"
 O_mark = "\033[33mO\033[0m"
 do_I_play = True
+greedy = True
+temperature = None if greedy else 0.1
+
+# player = np.random.choice([1,-1])
+player = -1
 
 def normalize_board(board, env, player):
     state_ = env.get_perspective_state(board,player)
@@ -74,32 +79,39 @@ folder_path = "model/alphazero/"
 print("what the...")
 args = {
     'C': 2,
-    'num_searches': 600,
+    'num_searches': 800,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
 }
 
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = AlphaZeroResNet(3, 64).to(device)
-model.load_state_dict(torch.load(folder_path+"model_1/model_1.pth", map_location=device))
+model = AlphaZeroResNet(5, 128).to(device)
+model.load_state_dict(torch.load(folder_path+"model_6/model_6_iter_4.pth", map_location=device))
 model.eval()
 
 mcts = MCTS(CF, args, model)
 
 state = CF.get_initial_state()
-player = np.random.choice([1,-1])
 
 pointer = 3
 op_pointer = 3
 
 if not do_I_play:
-    model2 = AlphaZeroResNet(3, 64).to(device)
-    model2.load_state_dict(torch.load(folder_path+"model99.pth", map_location=device))
+    model2 = AlphaZeroResNet(5, 128).to(device)
+    model2.load_state_dict(torch.load(folder_path+"model_6/model_6_iter_2.pth", map_location=device))
     model2.eval()
 
-    mcts2 = MCTS(CF, args, model2)
-
+    args2 = {
+        'C': 10,
+        'num_searches': 800,
+        'dirichlet_epsilon': 0.,
+        'dirichlet_alpha': 0.3
+    }
+    mcts2 = MCTS(CF, args2, model2)
+     
 print_board_while_gaming(state,pointer,player)
 
 while True:
@@ -110,8 +122,12 @@ while True:
             mcts_probs = mcts2.search(neutral_state)
             print("player 1:",mcts_probs)
             # time.sleep(5)
-            action = np.argmax(mcts_probs)
-            # action = np.random.choice(range(7),p=mcts_probs)
+            if greedy:
+                action = np.argmax(mcts_probs)
+            else:
+                mcts_temp_probs = mcts_probs ** (1/temperature)
+                mcts_temp_probs /= mcts_temp_probs.sum()
+                action = np.random.choice(range(7),p=mcts_temp_probs)
         else:
             # print("state", state)
             # print("state", state[0][0].detach().cpu().numpy())
@@ -129,8 +145,12 @@ while True:
         mcts_probs = mcts.search(neutral_state)
         print("player -1:",mcts_probs)
         # time.sleep(5)
-        #action = np.argmax(mcts_probs)
-        action = np.random.choice(range(7),p=mcts_probs)
+        if greedy:
+            action = np.argmax(mcts_probs)
+        else:
+            mcts_temp_probs = mcts_probs ** (1/temperature)
+            mcts_temp_probs /= mcts_temp_probs.sum()
+            action = np.random.choice(range(7),p=mcts_probs)
         
     state = CF.get_next_state(state, action, player)
     

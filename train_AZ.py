@@ -12,6 +12,37 @@ import os
 from models import AlphaZeroResNet
 from functions import get_current_time
 
+num_blocks, num_hidden = 5, 128
+args = {
+    'C': 4,
+    'num_searches': 1000,
+    'num_iterations': 8,
+    'num_selfPlay_iterations': 1000,
+    'num_parallel_games': 100,
+    'num_epochs': 2,
+    'batch_size': 64,
+    'temperature': 1,
+    'dirichlet_epsilon': 0.5,
+    'dirichlet_alpha': 1,
+    'train_time':get_current_time(),
+    'num_blocks':num_hidden,
+    'num_hidden':num_blocks
+}
+# args = {
+#     'C': 4,
+#     'num_searches': 100,
+#     'num_iterations': 5,
+#     'num_selfPlay_iterations': 100,
+#     'num_parallel_games': 10,
+#     'num_epochs': 2,
+#     'batch_size': 64,
+#     'temperature': 1,
+#     'dirichlet_epsilon': 0.5,
+#     'dirichlet_alpha': 1,
+#     'train_time':get_current_time(),
+#     'num_blocks':num_hidden,
+#     'num_hidden':num_blocks
+# }
 def seed_everything(seed: int = 42):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     random.seed(seed)
@@ -22,7 +53,7 @@ def seed_everything(seed: int = 42):
         torch.cuda.manual_seed(seed)  # type: ignore
         torch.cuda.manual_seed_all(seed)
         # 이건 학습 속도가 줄어든다고 함 
-        torch.backends.cudnn.deterministic = True  # type: ignore
+        torch.backends.cudnn.deterministic = False  # type: ignore
         torch.backends.cudnn.benchmark = False  # type: ignore
 
 seed_everything()
@@ -30,48 +61,31 @@ seed_everything()
 game = env.ConnectFour()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-num_blocks, num_hidden = 3, 64
+
 model = AlphaZeroResNet(
     num_blocks=num_blocks, \
     num_hidden=num_hidden
 ).to(device)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.02, weight_decay=0.0001)
 
+# defalut parameter in code
+# with 9 resnet block and 128 batch
 # args = {
 #     'C': 2,
-#     'num_searches': 200,
+#     'num_searches': 600,
 #     'num_iterations': 8,
-#     'num_selfPlay_iterations': 300,
-#     'num_parallel_games': 60,
-#     'num_epochs': 5,
-#     'batch_size': 64,
+#     'num_selfPlay_iterations': 500,
+#     'num_parallel_games': 100,
+#     'num_epochs': 4,
+#     'batch_size': 128,
 #     'temperature': 1.25,
 #     'dirichlet_epsilon': 0.25,
 #     'dirichlet_alpha': 0.3
 # }
-args = {
-    'C': 2,
-    'num_searches': 10,
-    'num_iterations': 8,
-    'num_selfPlay_iterations': 60,
-    'num_parallel_games': 60,
-    'num_epochs': 5,
-    'batch_size': 64,
-    'temperature': 1.25,
-    'dirichlet_epsilon': 0.25,
-    'dirichlet_alpha': 0.3
-}
+
 # alphaZero = AlphaZero(model, optimizer, game, args)
 # alphaZero.learn()
-
-alphaZero = AlphaZeroParallel(model, optimizer, game, args)
-alphaZero.learn()
-
-
-args['train_time'] = get_current_time()
-args['num_blocks'] = num_hidden
-args['num_hidden'] = num_blocks
 
 num = 1
 while True:
@@ -81,18 +95,18 @@ while True:
         print(folder_path+" 에 폴더를 만들었습니다.")
         break
     else: num += 1
+args['model_num'] = num
 
-with open('model/alphazero/model_{}/model_config_{}.json'.format(num,num), 'w') as f:
-    json.dump(args, f, indent=4, ensure_ascii=False)
-torch.save(alphaZero.model.state_dict(), "model/alphazero/model_{}/model_{}.pth".format(num))
+alphaZero = AlphaZeroParallel(model, optimizer, game, args)
+alphaZero.learn()
 
-plt.plot(alphaZero.losses)
-plt.savefig('model/alphazero/model_{}/loss_{}.png'.format(num,num))
-plt.show()
-plt.plot(alphaZero.vlosses)
-plt.savefig('model/alphazero/model_{}/vloss_{}.png'.format(num,num))
-plt.show()
-plt.plot(alphaZero.plosses)
-plt.savefig('model/alphazero/model_{}/ploss_{}.png'.format(num,num))
-plt.show()
+
+
+
+
+# with open('model/alphazero/model_{}/model_config_{}.json'.format(num,num), 'w') as f:
+#     json.dump(args, f, indent=4, ensure_ascii=False)
+# torch.save(alphaZero.model.state_dict(), "model/alphazero/model_{}/model_{}_iter_{}.pth".format(num,num,iter))
+
+
 

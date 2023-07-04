@@ -14,7 +14,8 @@ from env import MCTS, MCTSParallel, SPG
 from functions import board_normalization, \
     get_model_config, set_optimizer, \
     get_distinct_actions, is_full_after_my_turn, \
-    softmax_policy, get_valid_actions, get_next_board
+    softmax_policy, get_valid_actions, get_next_board, \
+    get_current_time
 from ReplayBuffer import RandomReplayBuffer
 # models.py 분리 후 이동, 정상 작동하면 지울 듯 
 # import torch.nn.init as init
@@ -22,6 +23,7 @@ from ReplayBuffer import RandomReplayBuffer
 from models import DQNModel, HeuristicModel, RandomModel, MinimaxModel, \
                     AlphaZeroResNet
 import json
+import matplotlib.pyplot as plt
 
 # editable hyperparameters
 # let iter=10000, then
@@ -2167,9 +2169,18 @@ class AlphaZeroParallel:
     def __init__(self, model, optimizer, game, args):
         self.model = model
         self.optimizer = optimizer
-        self.game = game
         self.args = args
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR( \
+            self.optimizer, 
+            max_lr=0.2,
+            steps_per_epoch=self.args['batch_size'], 
+            epochs=self.args['num_epochs'],
+            anneal_strategy='linear'
+        )
+        self.game = game
+        
         self.mcts = MCTSParallel(game, args, model)
+        self.steps = 0
         self.vlosses = []
         self.plosses = []
         self.losses = []
@@ -2177,24 +2188,32 @@ class AlphaZeroParallel:
     def selfPlay(self):
         return_memory = []
         player = 1
+        # num)parallel_games 만큼 게임을 만든다
         spGames = [SPG(self.game) for spg in range(self.args['num_parallel_games'])]
         
         while len(spGames) > 0:
             states = np.stack([spg.state for spg in spGames])
             neutral_states = self.game.change_perspective(states, player)
             
+            # MCTS 형성 
             self.mcts.search(neutral_states, spGames)
             
             for i in range(len(spGames))[::-1]:
                 spg = spGames[i]
                 
                 action_probs = np.zeros(self.game.action_size)
+
+                # 방문 횟수를 비율로 해서 고른다. 이거도 ucb로 해서 고르면 안되나?
                 for child in spg.root.children:
                     action_probs[child.action_taken] = child.visit_count
+                    #action_probs[child.action_taken] = child.get_ucb(child)
                 action_probs /= np.sum(action_probs)
+                root_q = (spg.root.value_sum / spg.root.visit_count) 
+                root_q = root_q[0] if isinstance(root_q, np.ndarray) else root_q
+                # q와 z를 모두 target으로 이용하기 위해 memory 구조 변경 
+                spg.memory.append((spg.root.state, action_probs, root_q, player))
 
-                spg.memory.append((spg.root.state, action_probs, player))
-
+                # temp가 클 수록 더 고른 분포를 고른다.
                 temperature_action_probs = action_probs ** (1 / self.args['temperature'])
                 temperature_action_probs /= np.sum(temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
                 action = np.random.choice(self.game.action_size, p=temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
@@ -2203,15 +2222,18 @@ class AlphaZeroParallel:
 
                 value, is_terminal = self.game.get_value_and_terminated(spg.state, action)
 
+                # 게임이 종료되면, memory에 state, policy, value 를 저장한다.
+                # 일단 z와 q의 비율은 1대1로 두자 
                 if is_terminal:
-                    for hist_neutral_state, hist_action_probs, hist_player in spg.memory:
-                        hist_outcome = value if hist_player == player else self.game.get_opponent_value(value)
+                    for hist_neutral_state, hist_action_probs, hist_value, hist_player in spg.memory:
+                        hist_z = value if hist_player == player else self.game.get_opponent_value(value)
+                        hist_outcome = (hist_z+hist_value)/2.
                         return_memory.append((
                             self.game.get_encoded_state(hist_neutral_state),
                             hist_action_probs,
                             hist_outcome
                         ))
-                    del spGames[i]
+                    del spGames[i]  # 메모리 관리를 위해 삭제 
                     
             player = self.game.get_opponent(player)
             
@@ -2232,7 +2254,7 @@ class AlphaZeroParallel:
             out_policy, out_value = self.model(state)
             policy_loss = F.cross_entropy(out_policy, policy_targets)
             value_loss = F.mse_loss(out_value, value_targets)
-            loss = policy_loss + value_loss
+            loss = 0.9*policy_loss + 0.1*value_loss
             
             self.plosses.append(policy_loss.item())
             self.vlosses.append(value_loss.item())
@@ -2241,6 +2263,10 @@ class AlphaZeroParallel:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+            self.scheduler.step()
+            self.steps += 1
+
+            
     
     def learn(self):
         for iteration in range(self.args['num_iterations']):
@@ -2249,24 +2275,60 @@ class AlphaZeroParallel:
                 ))
             memory = []
             
+            # selfplay 할때는 model을 evaluation 모드로 바꿔줌 
             self.model.eval()
+
+            # selfplay 함수는 selfplay 도중에 저장한 메모리를 리턴한다 .
             for selfPlay_iteration in range(self.args['num_selfPlay_iterations'] // self.args['num_parallel_games']):
                 print(" num_selfplay_iterations: {}/{}".format(\
                     selfPlay_iteration+1, self.args['num_selfPlay_iterations'] // self.args['num_parallel_games']
                 ))
                 memory += self.selfPlay()
-                
+            print(len(memory))
+            self.scheduler = torch.optim.lr_scheduler.OneCycleLR( \
+                self.optimizer, 
+                max_lr=0.2,
+                steps_per_epoch=math.ceil(len(memory)/self.args['batch_size']), 
+                epochs=self.args['num_epochs'],
+                anneal_strategy='linear'
+            )    
+            # 저장한 memory들로 train할 때는 train 모드로 바꿔줌 
             self.model.train()
+
             for epoch in range(self.args['num_epochs']):
                 print("    num_epochs: {}/{}".format(\
                     epoch+1, self.args['num_epochs']
                 ))
                 self.train(memory)
             
-            # torch.save(self.model.state_dict(), f"model_{iteration}_{self.game}.pth")
-            # torch.save(self.optimizer.state_dict(), f"optimizer_{iteration}_{self.game}.pth")
+            self.save(iteration)
+            
+            # torch.save(self.model.state_dict(), f"model/alphazero/model_{iteration}_{self.game}.pth")
+            # torch.save(self.optimizer.state_dict(), f"model/alphazero/optimizer_{iteration}_{self.game}.pth")
   
+    def save(self,iter):
+        # 저장할 폴더 찾고
+        num = self.args['model_num']
+        
+        # args 저장하고
+        self.args['train_time'] = get_current_time()
+        with open('model/alphazero/model_{}/model_config_{}.json'.format(num,num), 'w') as f:
+            json.dump(self.args, f, indent=4, ensure_ascii=False)
+        
+        # 모델 저장하고
+        torch.save(self.model.state_dict(), "model/alphazero/model_{}/model_{}_iter_{}.pth".format(num,num,iter))
 
+        
+        # losses 저장하고
+        plt.plot(self.losses)
+        plt.savefig('model/alphazero/model_{}/loss_{}_iter{}.png'.format(num,num,iter))
+        plt.close()
+        plt.plot(self.vlosses)
+        plt.savefig('model/alphazero/model_{}/vloss_{}_iter{}.png'.format(num,num,iter))
+        plt.close()
+        plt.plot(self.plosses)
+        plt.savefig('model/alphazero/model_{}/ploss_{}_iter{}.png'.format(num,num,iter))
+        plt.close()
 
 # class AlphaZeroAgent:
 #     def __init__(self, env, model_num=5, num_simulations=300, num_iterations=3, num_episodes=5, batch_size=16):
