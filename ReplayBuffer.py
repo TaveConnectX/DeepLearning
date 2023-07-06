@@ -59,3 +59,7 @@ class RandomReplayBuffer:
         d_batch = torch.Tensor([d for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)
         
         return s_batch, a_batch, r_batch, s_prime_batch, m_batch, d_batch
+    
+
+    def clear(self):
+        self.buffer.clear()

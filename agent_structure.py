@@ -463,7 +463,7 @@ class ConnectFourDQNAgent(nn.Module):
                                     self.memory.add(past_state, past_action, action, -reward, op_state, mask,done)
                                 elif self.next_state_is_op_state:
                                     
-                                    self.memory.add(past_state, past_action,past_reward, state,mask, past_done)
+                                    self.memory.add(past_state, past_action,-reward, state,mask, past_done)
                                 else:
                                     self.memory.add(past_state, past_action, -reward, op_state, mask,done)
                                 
@@ -645,6 +645,7 @@ class ConnectFourDQNAgent(nn.Module):
                     new_model = copy.deepcopy(self)
                     new_model.policy_net.eval()
                     new_model.target_net.eval()
+                    new_model.memory.clear()
                     new_model.eps = 0.1
                     new_model.softmax_const = 0
                     new_model.temp = 0
@@ -677,7 +678,7 @@ class ConnectFourDQNAgent(nn.Module):
             new_model.target_net.eval()
             new_model.eps = 0.1
             
-            pool = deque([new_model], maxlen=200)
+            pool = deque([new_model], maxlen=1000)
         # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
         else: players = {1: self, 2: op_model}
 
@@ -687,16 +688,16 @@ class ConnectFourDQNAgent(nn.Module):
         for i in range(epi):
             
             if self.selfplay: 
-                random.shuffle(pool)
+                # random.shuffle(pool)
                 players[2] = random.choice(pool)
             # 100번마다 loss, eps 등의 정보 표시
             if i!=0 and i%200==0: 
                 #env.print_board(clear_board=False)
                 print("epi:",i, ", agent's step:",self.steps)
                 # 얼마나 학습이 진행되었는지 확인하기 위해, 모델 성능 측정 
-                # evaluate_model(self, record=self.record)
+                evaluate_model(self, record=self.record)
                 
-                # print(self.record[0][-1],self.record[1][-1], self.record[2][-1])
+                print(self.record[0][-1],self.record[1][-1], self.record[2][-1])
                 # print("agent의 승률이 {}%".format(int(100*record[0]/sum(record))))
                 print("loss:",sum(self.losses[-101:-1])/100.)
                 if self.eps > self.softmax_const: print("epsilon:",self.eps)
@@ -784,7 +785,7 @@ class ConnectFourDQNAgent(nn.Module):
                                     self.memory.add(past_state, past_action, action, -reward, op_state, mask,done)
                                 elif self.next_state_is_op_state:
                                     
-                                    self.memory.add(past_state, past_action,past_reward, state,mask, past_done)
+                                    self.memory.add(past_state, past_action,-reward, state,mask, past_done)
                                 else:
                                     self.memory.add(past_state, past_action, -reward, op_state, mask,done)
                                 # print for debugging
@@ -845,6 +846,7 @@ class ConnectFourDQNAgent(nn.Module):
                     new_model.policy_net.eval()
                     new_model.target_net.eval()
                     new_model.eps = 0.1
+                    new_model.memory.clear()
                     new_model.softmax_const = 0
                     new_model.temp = 0
                     pool.append(new_model)
@@ -2166,17 +2168,12 @@ class AlphaZero:
             torch.save(self.optimizer.state_dict(), f"optimizer_{iteration}_{self.game}.pt")
 
 class AlphaZeroParallel:
-    def __init__(self, model, optimizer, game, args):
+    def __init__(self, model, optimizer, scheduler, game, args):
         self.model = model
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.args = args
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR( \
-            self.optimizer, 
-            max_lr=0.2,
-            steps_per_epoch=self.args['batch_size'], 
-            epochs=self.args['num_epochs'],
-            anneal_strategy='linear'
-        )
+        
         self.game = game
         
         self.mcts = MCTSParallel(game, args, model)
@@ -2200,7 +2197,8 @@ class AlphaZeroParallel:
             
             for i in range(len(spGames))[::-1]:
                 spg = spGames[i]
-                
+                spg.search_step += 1
+                # print(spg.search_step)
                 action_probs = np.zeros(self.game.action_size)
 
                 # 방문 횟수를 비율로 해서 고른다. 이거도 ucb로 해서 고르면 안되나?
@@ -2208,15 +2206,21 @@ class AlphaZeroParallel:
                     action_probs[child.action_taken] = child.visit_count
                     #action_probs[child.action_taken] = child.get_ucb(child)
                 action_probs /= np.sum(action_probs)
+
+
+                # 한 게임당 한 스텝 씩 움직이고 다시 search를 하기 때문에 root로 고정해도됨 
                 root_q = (spg.root.value_sum / spg.root.visit_count) 
                 root_q = root_q[0] if isinstance(root_q, np.ndarray) else root_q
                 # q와 z를 모두 target으로 이용하기 위해 memory 구조 변경 
                 spg.memory.append((spg.root.state, action_probs, root_q, player))
 
-                # temp가 클 수록 더 고른 분포를 고른다.
-                temperature_action_probs = action_probs ** (1 / self.args['temperature'])
-                temperature_action_probs /= np.sum(temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
-                action = np.random.choice(self.game.action_size, p=temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
+                if spg.search_step >= self.args['step_makes_temperature_0']:
+                    action = np.argmax(action_probs)
+                else:
+                    # temp가 클 수록 더 고른 분포를 고른다.
+                    temperature_action_probs = action_probs ** (1 / self.args['temperature'])
+                    temperature_action_probs /= np.sum(temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
+                    action = np.random.choice(self.game.action_size, p=temperature_action_probs) # Divide temperature_action_probs with its sum in case of an error
 
                 spg.state = self.game.get_next_state(spg.state, action, player)
 
@@ -2227,7 +2231,7 @@ class AlphaZeroParallel:
                 if is_terminal:
                     for hist_neutral_state, hist_action_probs, hist_value, hist_player in spg.memory:
                         hist_z = value if hist_player == player else self.game.get_opponent_value(value)
-                        hist_outcome = (hist_z+hist_value)/2.
+                        hist_outcome = (1-0.5)*hist_z + 0.5*hist_value
                         return_memory.append((
                             self.game.get_encoded_state(hist_neutral_state),
                             hist_action_probs,
@@ -2254,7 +2258,7 @@ class AlphaZeroParallel:
             out_policy, out_value = self.model(state)
             policy_loss = F.cross_entropy(out_policy, policy_targets)
             value_loss = F.mse_loss(out_value, value_targets)
-            loss = 0.9*policy_loss + 0.1*value_loss
+            loss = policy_loss + 0.1*value_loss
             
             self.plosses.append(policy_loss.item())
             self.vlosses.append(value_loss.item())
@@ -2285,13 +2289,14 @@ class AlphaZeroParallel:
                 ))
                 memory += self.selfPlay()
             print(len(memory))
-            self.scheduler = torch.optim.lr_scheduler.OneCycleLR( \
-                self.optimizer, 
-                max_lr=0.2,
-                steps_per_epoch=math.ceil(len(memory)/self.args['batch_size']), 
-                epochs=self.args['num_epochs'],
-                anneal_strategy='linear'
-            )    
+            if not self.scheduler is None:
+                self.scheduler = torch.optim.lr_scheduler.OneCycleLR( \
+                    self.optimizer, 
+                    max_lr=0.2,
+                    steps_per_epoch=math.ceil(len(memory)/self.args['batch_size']), 
+                    epochs=self.args['num_epochs'],
+                    anneal_strategy='linear'
+                )    
             # 저장한 memory들로 train할 때는 train 모드로 바꿔줌 
             self.model.train()
 

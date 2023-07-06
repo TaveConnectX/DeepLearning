@@ -396,7 +396,8 @@ class Node:
             q_value = 0
         else:
             # child와 parent는 적이므로 1에서 빼주기로 한다 
-            q_value = 1 - ((child.value_sum / child.visit_count) + 1) / 2
+            # q_value = 1 - ((child.value_sum / child.visit_count) + 1) / 2
+            q_value = -child.value_sum/child.visit_count
         return q_value + self.args['C'] * (math.sqrt(self.visit_count) / (child.visit_count + 1)) * child.prior
     
     def expand(self, policy):
@@ -570,36 +571,200 @@ class SPG:
         self.memory = []
         self.root = None
         self.node = None
-
-# class Node():
-#     def __init__(self, data=None, children={}, player=None):
-#         self.data = data
-#         self.parent = None
-#         self.children = children
-#         self.player = None
+        self.search_step = 0
 
 
-# class Tree():
-#     def __init__(self, state=None):
-#         self.root = Node(data=state)
-#         self.cur = self.root
+class Node_alphago:
+    def __init__(self, game, args, state, parent=None, action_taken=None, prior=0, visit_count=0):
+        self.game = game
+        self.args = args
+        self.state = state
+        self.parent = parent
+        self.action_taken = action_taken
+        self.prior = prior
+        
+        self.children = []
+        
+        self.visit_count = visit_count
+        self.value_sum = 0
+        
+    def is_fully_expanded(self):
+        return len(self.children) > 0
+    
+    def select(self):
+        best_child = None
+        best_ucb = -np.inf
+        
+        for child in self.children:
+            ucb = self.get_ucb(child)
+            if ucb > best_ucb:
+                best_child = child
+                best_ucb = ucb
+                
+        return best_child
+    
+    def get_ucb(self, child):
+        if child.visit_count == 0:
+            q_value = 0
+        else:
+            # child와 parent는 적이므로 1에서 빼주기로 한다 
+            q_value = 1 - ((child.value_sum / child.visit_count) + 1) / 2
+        return q_value + self.args['C'] * (math.sqrt(self.visit_count) / (child.visit_count + 1)) * child.prior
+    
+    def expand(self, policy):
+        for action, prob in enumerate(policy):
+            if prob > 0:
+                child_state = self.state.copy()
+                # 내가 두는 건 항상 1, child 는 -1이면 뭔가 이상한데,,,
+                child_state = self.game.get_next_state(child_state, action, 1)
+                child_state = self.game.change_perspective(child_state, player=-1)
+                # game, args, state, parent=None, action_taken=None, prior=0, visit_count=0
+                child = Node_alphago(
+                    game=self.game, 
+                    args=self.args, 
+                    state=child_state, 
+                    parent=self, 
+                    action_taken=action, 
+                    prior=prob
+                )
+                self.children.append(child)
+                
+        return child
+            
+    def backpropagate(self, value):
+        self.value_sum += value
+        self.visit_count += 1
+        
+        value = self.game.get_opponent_value(value)
+        if self.parent is not None:
+            self.parent.backpropagate(value)  
 
-#     def branch(self, node):
-#         valid_actions = get_valid_actions(node.data)
-#         for action in valid_actions:
-#             next_board = get_next_board(node.data, action)
-#             node.children[action] = Node(next_board, player=2//node.player)
-#             node.children[action].parent = node
 
-#     def set_root(self, node):
-#         node.parent = None
-#         self.root = node
-#         self.cur = self.root
+class MCTS_alphago:
+    def __init__(self, game, args, model, value_model):
+        self.game = game
+        self.args = args
+        self.model = model
+        self.value_model = value_model
 
-#     def get_root(self):
-#         self.cur = self.root
+    def board_normalization(self,state):
+        return torch.tensor(state, device=self.model.device).float().unsqueeze(0).unsqueeze(0)
 
-#     def get_parent(self):
-#         self.cur = self.cur.parent
+    def get_nash_prob_and_value(self,payoff_matrix, vas, iterations=50):
+        if isinstance(payoff_matrix, torch.Tensor):    
+            payoff_matrix = payoff_matrix.clone().detach().reshape(7,7)
+        elif isinstance(payoff_matrix, np.ndarray):
+            payoff_matrix = payoff_matrix.reshape(7,7)
+        vas = np.where(np.array(vas) == 1)[0]
+        payoff_matrix = payoff_matrix[vas][:,vas]
+        # print("vas:",vas)
+        '''Return the oddments (mixed strategy ratios) for a given payoff matrix'''
+        transpose_payoff = torch.transpose(payoff_matrix,0,1)
+        row_cum_payoff = torch.zeros(len(payoff_matrix)).to(self.model.device)
+        col_cum_payoff = torch.zeros(len(transpose_payoff)).to(self.model.device)
 
+        col_count = np.zeros(len(transpose_payoff))
+        row_count = np.zeros(len(payoff_matrix))
+        active = 0
+        for i in range(iterations):
+            row_count[active] += 1 
+            col_cum_payoff += payoff_matrix[active]
+            active = torch.argmin(col_cum_payoff)
+            col_count[active] += 1 
+            row_cum_payoff += transpose_payoff[active]
+            active = torch.argmax(row_cum_payoff)
+            
+        value_of_game = (max(row_cum_payoff) + min(col_cum_payoff)) / 2.0 / iterations  
+        row_prob = row_count / iterations
+        col_prob = col_count / iterations
+        
+        return row_prob, col_prob, value_of_game
+    
+
+    @torch.no_grad()
+    def search(self, state):
+        root = Node_alphago(self.game, self.args, state, visit_count=1)
+        
+        # policy 만드는 부분을 바꿔야됨 
+        q_values = self.model(
+            self.board_normalization(state)
+        )
+        valid_moves = self.game.get_valid_moves(state)
+        # print(q_values)
+        # print(valid_moves)
+        pa, pb, v = self.get_nash_prob_and_value(q_values, valid_moves)
+        policy = np.zeros_like(valid_moves, dtype=float)
+        policy[np.array(valid_moves) == 1] = pa
+        print(policy, v)
+        # print(np.array(valid_moves) == 1,policy,pa,pb, v)
+        # policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
+        policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
+            * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
+        policy *= valid_moves
+        policy /= policy.sum()
+
+        root.expand(policy)
+        
+        for search in range(self.args['num_searches']):
+            node = root
+            
+            while node.is_fully_expanded():
+                node = node.select()
+                
+            value, is_terminal = self.game.get_value_and_terminated(node.state, node.action_taken)
+            value = self.game.get_opponent_value(value)
+            
+            if not is_terminal:
+                q_values = self.model(
+                    self.board_normalization(node.state)
+                )
+                valid_moves = self.game.get_valid_moves(node.state)
+                # print(node.state, valid_moves)
+                # print(q_values)
+                # print(valid_moves)
+                pa, pb, value = self.get_nash_prob_and_value(q_values, valid_moves)
+                policy = np.zeros_like(valid_moves, dtype=float)
+                policy[np.array(valid_moves) == 1] = pa
+                policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
+            * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
+                
+                policy *= valid_moves
+                policy /= policy.sum()
+                # print(policy,pb, value)
+                # policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
+                # valid_moves = self.game.get_valid_moves(node.state)
+                # policy *= valid_moves
+                # policy /= np.sum(policy)
+                
+                value = value.item()
+                node.expand(policy)
+                # 여기서 rollout policy로 다 둬보기
+                # value_r = self.get_rollout_value(node.state)
+                # rollout policy는 컴퓨팅 파워가 많이 필요하므로 nash value로 대체 
+                value_r = value
+                # value network에 넣어보기 
+                # value_from_net = self.get_value_from_net(node.state)
+                # value_net 이 완성되기 전까진 nash value로 대체
+                value_from_net = value
+                # 둘을 평균낸 것을 value로 쓴다
+                value = (1-0.5) * value_r + 0.5 * value_from_net
+                
+            node.backpropagate(value)    
+            
+            
+        action_probs = np.zeros(self.game.action_size)
+        # action prob은 방문 횟수에 비례하도록 정한다 
+        for child in root.children:
+            action_probs[child.action_taken] = child.visit_count
+        action_probs /= np.sum(action_probs)
+        return action_probs
+    
+    def get_rollout_value(self, state):
+        # 끝날 때까지 둬보기
+        pass
+    
+    def get_value_from_net(self, state):
+
+        # 
+        return self.value_model(state)
 

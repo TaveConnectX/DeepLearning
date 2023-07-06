@@ -19,8 +19,8 @@ use_search = True
 CF = ConnectFour()
 print("what the...")
 args = {
-    'C': 10,
-    'num_searches': 343,
+    'C': 2,
+    'num_searches': 100,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
 }
@@ -28,9 +28,9 @@ args = {
 
 player = np.random.choice([1,-1])
 
-
-model = AlphaZeroResNet(5, 128).to(device)
-model.load_state_dict(torch.load("model/alphazero/model_6/model_6_iter_2.pth", map_location=device))
+model_num, iter = 15, 0
+model = AlphaZeroResNet(5,128).to(device)
+model.load_state_dict(torch.load("model/alphazero/model_{}/model_{}_iter_{}.pth".format(model_num,model_num,iter), map_location=device))
 model.eval()
 
 mcts = MCTS(CF, args, model)
@@ -91,7 +91,9 @@ def compare_model(model1, model2, n_battle=10):
                     action_probs, value = players[turn](encoded_state)
                     valid_moves = (state_[0] == 0).astype(np.uint8)
                     
+                    #print(action_probs, value, valid_moves)
                     action_probs = action_probs.detach().cpu().numpy() * valid_moves
+
                     action_probs /= np.sum(action_probs)
                     # print(state_)
                     # print(np.round(action_probs,3), value)

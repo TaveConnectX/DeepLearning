@@ -184,6 +184,7 @@ class ResNetforDQN(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(32 * 6 * 7, action_size),
+            nn.Tanh()
             
         )
 

@@ -20,6 +20,23 @@ do_I_play = True
 greedy = True
 temperature = None if greedy else 0.1
 
+
+nb1, hl1, model1_name = 5,128,'model_11/model_11_iter_0.pth'
+args = {
+    'C': 2,
+    'num_searches': 100,
+    'dirichlet_epsilon': 0.,
+    'dirichlet_alpha': 0.3
+}
+
+nb2, hl2, model2_name = 5,128,'model_6/model_6_iter_4.pth'
+args2 = {
+        'C': 1.5,
+        'num_searches': 800,
+        'dirichlet_epsilon': 0.,
+        'dirichlet_alpha': 0.3
+}
+# 기준이 되는 모델은 player=1, 상대(비교 모델 or 사람)는 player=-1 이 됨 
 # player = np.random.choice([1,-1])
 player = -1
 
@@ -41,11 +58,14 @@ def select_action(state, env, agent):
     return action
 
 def print_board_while_gaming(board, pointer, player):
-    os.system('cls' if os.name == 'nt' else 'clear')
+    # os.system('cls' if os.name == 'nt' else 'clear')
     n_row, n_col = 6,7
     print("Connect Four")
-    print("Player1: "+X_mark)
-    print("Player2: "+O_mark)
+    print("Player1 {} with C={},search={}: {}".format(model1_name,args['C'],args["num_searches"],X_mark))
+    if do_I_play:
+        print("Player2:",O_mark)
+    else:
+        print("Player2 {} with C={},search={}: {}".format(model2_name,args2['C'],args2["num_searches"],O_mark))
     print("-----------------------")
     empty_space = [" "]*n_col
     empty_space[pointer] = X_mark if player == 1 else O_mark
@@ -77,19 +97,14 @@ def print_board_while_gaming(board, pointer, player):
 CF = ConnectFour()
 folder_path = "model/alphazero/"
 print("what the...")
-args = {
-    'C': 2,
-    'num_searches': 800,
-    'dirichlet_epsilon': 0.,
-    'dirichlet_alpha': 0.3
-}
+
 
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = AlphaZeroResNet(5, 128).to(device)
-model.load_state_dict(torch.load(folder_path+"model_6/model_6_iter_4.pth", map_location=device))
+model = AlphaZeroResNet(nb1, hl1).to(device)
+model.load_state_dict(torch.load(folder_path+model1_name, map_location=device))
 model.eval()
 
 mcts = MCTS(CF, args, model)
@@ -100,23 +115,18 @@ pointer = 3
 op_pointer = 3
 
 if not do_I_play:
-    model2 = AlphaZeroResNet(5, 128).to(device)
-    model2.load_state_dict(torch.load(folder_path+"model_6/model_6_iter_2.pth", map_location=device))
+    model2 = AlphaZeroResNet(nb2,hl2).to(device)
+    model2.load_state_dict(torch.load(folder_path+model2_name, map_location=device))
     model2.eval()
 
-    args2 = {
-        'C': 10,
-        'num_searches': 800,
-        'dirichlet_epsilon': 0.,
-        'dirichlet_alpha': 0.3
-    }
+    
     mcts2 = MCTS(CF, args2, model2)
      
 print_board_while_gaming(state,pointer,player)
 
 while True:
     
-    if player == 1:
+    if player == -1:
         if not do_I_play:
             neutral_state = CF.change_perspective(state, player)
             mcts_probs = mcts2.search(neutral_state)
@@ -140,7 +150,7 @@ while True:
                 continue
 
             
-    else:
+    elif player == 1:
         neutral_state = CF.change_perspective(state, player)
         mcts_probs = mcts.search(neutral_state)
         print("player -1:",mcts_probs)
@@ -150,7 +160,7 @@ while True:
         else:
             mcts_temp_probs = mcts_probs ** (1/temperature)
             mcts_temp_probs /= mcts_temp_probs.sum()
-            action = np.random.choice(range(7),p=mcts_probs)
+            action = np.random.choice(range(7),p=mcts_temp_probs)
         
     state = CF.get_next_state(state, action, player)
     

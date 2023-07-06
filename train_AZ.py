@@ -15,15 +15,16 @@ from functions import get_current_time
 num_blocks, num_hidden = 5, 128
 args = {
     'C': 4,
-    'num_searches': 1000,
+    'num_searches': 100,
     'num_iterations': 8,
-    'num_selfPlay_iterations': 1000,
+    'num_selfPlay_iterations': 800,
     'num_parallel_games': 100,
     'num_epochs': 2,
     'batch_size': 64,
     'temperature': 1,
-    'dirichlet_epsilon': 0.5,
-    'dirichlet_alpha': 1,
+    'step_makes_temperature_0':9,
+    'dirichlet_epsilon': 0.25,
+    'dirichlet_alpha': 0.03,
     'train_time':get_current_time(),
     'num_blocks':num_hidden,
     'num_hidden':num_blocks
@@ -67,8 +68,16 @@ model = AlphaZeroResNet(
     num_hidden=num_hidden
 ).to(device)
 
-optimizer = torch.optim.SGD(model.parameters(), lr=0.02, weight_decay=0.0001)
+# model.load_state_dict(torch.load('model/alphazero/model_8/model_8_iter_7.pth'))
 
+optimizer = torch.optim.SGD(model.parameters(), lr=0.02, weight_decay=0.0001)
+scheduler = torch.optim.lr_scheduler.OneCycleLR( \
+            optimizer, 
+            max_lr=0.2,
+            steps_per_epoch=args['batch_size'], 
+            epochs=args['num_epochs'],
+            anneal_strategy='linear'
+        )
 # defalut parameter in code
 # with 9 resnet block and 128 batch
 # args = {
@@ -97,7 +106,7 @@ while True:
     else: num += 1
 args['model_num'] = num
 
-alphaZero = AlphaZeroParallel(model, optimizer, game, args)
+alphaZero = AlphaZeroParallel(model, optimizer,scheduler, game, args)
 alphaZero.learn()
 
 
