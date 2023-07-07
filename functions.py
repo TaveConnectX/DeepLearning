@@ -33,9 +33,10 @@ def save_model(model, filename='Model', folder_num=None):
 
 # 모델 load. 매개변수만 load 하는게 overload가 적다고 하여 이 방법을 선택하였음 
 def load_model(model, filename='Model'):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     if not '.pth' in filename or not '.pt' in filename:
         filename += '.pth'
-    model.load_state_dict(torch.load(filename, map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load(filename, map_location=device))
 
 # console 창을 비우는 함수 
 def clear():

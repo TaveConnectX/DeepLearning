@@ -2,6 +2,7 @@ from functions import get_model_and_config_name, board_normalization, \
                         load_model
 import env
 from agent_structure import ConnectFourDQNAgent
+from models import *
 import random
 import numpy as np
 import torch
@@ -54,7 +55,8 @@ class Classifier(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        x = x.view(x.size(0), -1)  # 2차원 배열을 1차원으로 평탄화
+        # x = x.view(x.size(0), -1)  # 2차원 배열을 1차원으로 평탄화
+        x = x.flatten()  # 일반적인 사용을 위해 수정
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -80,6 +82,7 @@ SL_model_name, SL_model_config = get_model_and_config_name(folder_path+'/model_S
 # print(SL_model_name,SL_model_config)
 # 불러온 config 파일로 모델 껍데기를 만듦
 SL_agent = ConnectFourDQNAgent(config_file_name=folder_path+'/model_SL/'+SL_model_config)
+SL_agent.policy_net = ResNetforDQN(action_size=49)
 # 불러온 모델 파일로 모델 업로드
 load_model(SL_agent.policy_net, filename=folder_path+'/model_SL/'+SL_model_name)
 
@@ -87,6 +90,7 @@ load_model(SL_agent.policy_net, filename=folder_path+'/model_SL/'+SL_model_name)
 RL_model_name, RL_model_config = get_model_and_config_name(folder_path+'/model_RL')
 # print(RL_model_name,RL_model_config)
 RL_agent = ConnectFourDQNAgent(config_file_name=folder_path+'/model_RL/'+RL_model_config)
+RL_agent.policy_net = ResNetforDQN(action_size=49)
 load_model(RL_agent.policy_net, filename=folder_path+'/model_RL/'+RL_model_name)
 
 SL_agent.eps, RL_agent.eps = 0.05, 0.05  # 되도록 greedy 한 action을 취하기 위해서
@@ -96,7 +100,7 @@ SL_agent.eps, RL_agent.eps = 0.05, 0.05  # 되도록 greedy 한 action을 취하
 VEnv = env.ConnectFourEnv()
 
 # 전역변수 설정
-total_count = 30000
+total_count = 1000
 learn_count = int(total_count * 0.8)
 test_count = total_count - learn_count
 
@@ -194,6 +198,7 @@ for i in range(0, learn_count) :
     if(i % 500 == 0) :
         print("training : " + str(i))
     inputs = torch.FloatTensor(data[i][0])
+    print(inputs)
     targets = torch.FloatTensor(data[i][1]).unsqueeze(0)  
 
     # 경사 초기화
@@ -206,7 +211,7 @@ for i in range(0, learn_count) :
     optimizer.step()
 
 # 모델 저장
-torch.save(model.state_dict(), "ValueNetwork.pth")
+torch.save(model.state_dict(), "model/models_for_V_net/ValueNetwork.pth")
 print("saved model")
 
 # 테스트
