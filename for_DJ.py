@@ -3,7 +3,7 @@ from functions import get_model_and_config_name, board_normalization, \
                         load_model
 import env
 from agent_structure import ConnectFourDQNAgent
-
+import random
 import torch
 
 
@@ -33,10 +33,6 @@ load_model(RL_agent.policy_net, filename=folder_path+'/model_RL/'+RL_model_name)
 SL_agent.eps, RL_agent.eps = 0.0, 0.0  # greedy 한 action을 취하기 위해서
 
 
-
-
-
-
 # 환경 생성 
 VEnv = env.ConnectFourEnv()
 
@@ -45,34 +41,77 @@ VEnv = env.ConnectFourEnv()
 # 환경 초기화
 VEnv.reset()
 # 가능한 행동들
-print(VEnv.valid_actions)
+#print(VEnv.valid_actions)
 # 현재 플레이어
-print(VEnv.player)
+#print(VEnv.player)
 # 해당 agent가 convolution layer를 쓰는지 확인
-print(SL_agent.use_conv)
+#print(SL_agent.use_conv)
 
 # 보드를 가지고 오기
-print(VEnv.board)
+# print(VEnv.board)
 
-# 보드 정규화, noise의 여부, 환경, 모델이 conv를 쓰는지 여부를 넣어줌 
-# noise를 true로 써서 실험해보는 것도 좋을 듯?
 state_ = board_normalization(noise=False, env=VEnv, use_conv=SL_agent.use_conv)
 state = torch.from_numpy(state_).float()
 print(state)
 
+use_rl = False  # RL 에이전트를 사용할 턴인지 여부
+rl_start_turn = 19  # RL 에이전트를 사용하기 시작하는 턴
+
+for turn in range(1, 41):
+    print("Turn:", turn)
+    # SL 에이전트 사용 (1 ~ 18 수)
+    if turn < 19:
+        action = SL_agent.select_action(state=state, env=VEnv, player=VEnv.player)
+        if SL_agent.use_minimax: 
+            op_action_prediction = action[1]  # 상대 예상 액션은 이 파일에서 필요 없을 것으로 보임(아마?)
+            action = action[0]  # action은 이제 0~6 의 정수가 됨 
+    # RL 에이전트 사용 (19 수 이후)
+    else:
+        if use_rl:
+            action = RL_agent.select_action(state=state, env=VEnv, player=VEnv.player)
+            if RL_agent.use_minimax: 
+                op_action_prediction = action[1]  # 상대 예상 액션은 이 파일에서 필요 없을 것으로 보임(아마?)
+                action = action[0]  # action은 이제 0~6 의 정수가 됨 
+        else:
+            action = random.randint(0, 6)  # 랜덤으로 액션 선택
+
+    print("Selected Action:", action)
+
+    # 선택한 action으로 환경 진행
+    state, reward, done = VEnv.step(action)
+
+    print("Observation:", state)
+    print("Reward:", reward)
+    print("Done:", done)
+    print("Current Player:", VEnv.player)
+
+    # RL 에이전트 사용 여부 결정
+    if turn == rl_start_turn:
+        use_rl = True
+
+    if done:
+        print("Game Over")
+        break
+
+# 보드 정규화, noise의 여부, 환경, 모델이 conv를 쓰는지 여부를 넣어줌 
+# noise를 true로 써서 실험해보는 것도 좋을 듯?
+#state_ = board_normalization(noise=False, env=VEnv, use_conv=SL_agent.use_conv)
+#state = torch.from_numpy(state_).float()
+#print(state)
+
 # agent의 action 선택, 인자엔 state와 가능한 액션, 현재 플레이어를 넣어줌 
-action = SL_agent.select_action(state=state, env=VEnv, player= VEnv.player)
+#action = SL_agent.select_action(state=state, env=VEnv, player= VEnv.player)
 
 # minimax-DQN을 사용할 경우 (내 액션, 상대 예상 액션) 으로 리턴하기 때문에 앞에 하나만 필요함
-if SL_agent.use_minimax: 
-    op_action_prediction = action[1]  # 상대 예상 액션은 이 파일에서 필요 없을 것으로 보임(아마?)
-    action = action[0]  # action은 이제 0~6 의 정수가 됨 
-print(action)
+#if SL_agent.use_minimax: 
+#    op_action_prediction = action[1]  # 상대 예상 액션은 이 파일에서 필요 없을 것으로 보임(아마?)
+#    action = action[0]  # action은 이제 0~6 의 정수가 됨 
+#print(action)
 
 # 선택한 action으로 그 환경에서 진행했을 때 다음 보드판, 보상, 끝난 여부 출력
 # 환경은 reset 하지 않는한 계속 유지되므로 여기선 observation을 따로 저장해둘 필요 없을 듯? 
-observation, reward, done = VEnv.step(action)
-print(observation, reward, done, VEnv.player)  # player가 바뀐것을 알려주기 위해 출력해봄 
+#observation, reward, done = VEnv.step(action)
+#print(observation, reward, done, VEnv.player)  # player가 바뀐것을 알려주기 위해 출력해봄 
 
 # 더 필요한 함수나 기능, 또는 궁금한 점이 있다면, 
 # agent_structure.py의 ConnectFourDQNAgent class의 train() 이나
