@@ -88,10 +88,10 @@ folder_path = "model/alphazero/"
 print("what the...")
 
 num_battles = 55
-nb, hl, model_name = 9,128,'model_9/model_9_iter_0.pth'
+nb, hl, model_name = 5, 128,'model_16/model_16_iter_3.pth'
 args = {
     'C': 2,
-    'num_searches': 50,
+    'num_searches': 100,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
 }
@@ -108,7 +108,7 @@ result = {}
 
 # 풀을 만든다
 mctss = {}
-Cs = [i/10 for i in range(15,25)]
+Cs = [i/10 for i in range(5,30)]
 for c in Cs:
     new_args = copy.deepcopy(args)
     new_args['C'] = c

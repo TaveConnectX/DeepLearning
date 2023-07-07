@@ -14,21 +14,37 @@ from functions import get_current_time
 
 num_blocks, num_hidden = 5, 128
 args = {
-    'C': 4,
-    'num_searches': 100,
+    'C': 2,
+    'num_searches': 600,
     'num_iterations': 8,
-    'num_selfPlay_iterations': 800,
-    'num_parallel_games': 100,
+    'num_selfPlay_iterations': 5000,
+    'num_parallel_games': 1000,
     'num_epochs': 2,
-    'batch_size': 64,
+    'batch_size': 1024,
     'temperature': 1,
-    'step_makes_temperature_0':9,
+    'step_makes_temperature_0':20,
     'dirichlet_epsilon': 0.25,
-    'dirichlet_alpha': 0.03,
+    'dirichlet_alpha': 1,
     'train_time':get_current_time(),
     'num_blocks':num_hidden,
     'num_hidden':num_blocks
 }
+# args = {
+#     'C': 4,
+#     'num_searches': 100,
+#     'num_iterations': 8,
+#     'num_selfPlay_iterations': 800,
+#     'num_parallel_games': 100,
+#     'num_epochs': 2,
+#     'batch_size': 64,
+#     'temperature': 1,
+#     'step_makes_temperature_0':9,
+#     'dirichlet_epsilon': 0.5,
+#     'dirichlet_alpha': 1,
+#     'train_time':get_current_time(),
+#     'num_blocks':num_hidden,
+#     'num_hidden':num_blocks
+# }
 # args = {
 #     'C': 4,
 #     'num_searches': 100,
@@ -71,6 +87,7 @@ model = AlphaZeroResNet(
 # model.load_state_dict(torch.load('model/alphazero/model_8/model_8_iter_7.pth'))
 
 optimizer = torch.optim.SGD(model.parameters(), lr=0.02, weight_decay=0.0001)
+
 scheduler = torch.optim.lr_scheduler.OneCycleLR( \
             optimizer, 
             max_lr=0.2,
@@ -78,6 +95,8 @@ scheduler = torch.optim.lr_scheduler.OneCycleLR( \
             epochs=args['num_epochs'],
             anneal_strategy='linear'
         )
+optimizer = torch.optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-4)
+scheduler = None
 # defalut parameter in code
 # with 9 resnet block and 128 batch
 # args = {

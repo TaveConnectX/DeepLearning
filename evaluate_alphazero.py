@@ -14,12 +14,12 @@ import os
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-use_search = True
+use_search = False
 
 CF = ConnectFour()
 print("what the...")
 args = {
-    'C': 2,
+    'C': 0.5,
     'num_searches': 100,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
@@ -28,8 +28,8 @@ args = {
 
 player = np.random.choice([1,-1])
 
-model_num, iter = 15, 0
-model = AlphaZeroResNet(5,128).to(device)
+model_num, iter = 19, 7
+model = AlphaZeroResNet(9,128).to(device)
 model.load_state_dict(torch.load("model/alphazero/model_{}/model_{}_iter_{}.pth".format(model_num,model_num,iter), map_location=device))
 model.eval()
 

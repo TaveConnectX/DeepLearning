@@ -16,26 +16,27 @@ from functions import get_model_config, get_model_and_config_name,\
 
 X_mark = "\033[31mX\033[0m"
 O_mark = "\033[33mO\033[0m"
-do_I_play = True
+do_I_play = False
 greedy = True
 temperature = None if greedy else 0.1
 
 
-nb1, hl1, model1_name = 5,128,'model_11/model_11_iter_0.pth'
+nb1, hl1, model1_name = 9,128,'model_18/model_18_iter_7.pth'
 args = {
-    'C': 2,
-    'num_searches': 100,
+    'C': 1,
+    'num_searches': 350,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
 }
 
-nb2, hl2, model2_name = 5,128,'model_6/model_6_iter_4.pth'
+nb2, hl2, model2_name = 9,128,'model_19/model_19_iter_7.pth'
 args2 = {
-        'C': 1.5,
-        'num_searches': 800,
+        'C': 1,
+        'num_searches': 350,
         'dirichlet_epsilon': 0.,
         'dirichlet_alpha': 0.3
 }
+
 # 기준이 되는 모델은 player=1, 상대(비교 모델 or 사람)는 player=-1 이 됨 
 # player = np.random.choice([1,-1])
 player = -1
@@ -130,7 +131,7 @@ while True:
         if not do_I_play:
             neutral_state = CF.change_perspective(state, player)
             mcts_probs = mcts2.search(neutral_state)
-            print("player 1:",mcts_probs)
+            print("player -1:",mcts_probs)
             # time.sleep(5)
             if greedy:
                 action = np.argmax(mcts_probs)
@@ -153,7 +154,7 @@ while True:
     elif player == 1:
         neutral_state = CF.change_perspective(state, player)
         mcts_probs = mcts.search(neutral_state)
-        print("player -1:",mcts_probs)
+        print("player 1:",mcts_probs)
         # time.sleep(5)
         if greedy:
             action = np.argmax(mcts_probs)
