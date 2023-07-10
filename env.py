@@ -11,7 +11,7 @@ import time
 # import torch.nn.init as init
 # import torch.nn.functional as F
 from models import *
-from functions import get_valid_actions, get_next_board
+from functions import get_valid_actions, get_next_board, get_encoded_state
 
 # models = {
 #             1:CFLinear,
@@ -68,8 +68,11 @@ def compare_model(model1, model2, n_battle=10):
             # 성능 평가이므로, noise를 주지 않음 
             turn = comp_env.player
             state_ = board_normalization(noise=False,env=comp_env, model_type=players[turn].policy_net.model_type)
-            state = torch.from_numpy(state_).float()
             
+            # state = torch.from_numpy(state_).float()
+            # input channel=3 test
+            state = torch.tensor(get_encoded_state(state_))
+
             action = players[turn].select_action(state, comp_env, player=turn)
             if isinstance(action, tuple):
                 action = action[0]

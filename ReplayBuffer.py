@@ -20,8 +20,11 @@ class RandomReplayBuffer:
         s,*a,r,s_prime,mask,d = exp
 
         if self.use_conv:
-            s_ = s.reshape(6,7)
-            s_prime_ = s_prime.reshape(6,7)
+            # input channel=3 test
+            # s_ = s.reshape(6,7)
+            # s_prime_ = s_prime.reshape(6,7)
+            s_ = s
+            s_prime_ = s_prime
         else:
             s_ = s.flatten()
             s_prime_ = s_prime.flatten()
@@ -43,11 +46,14 @@ class RandomReplayBuffer:
             # state_batch.shape: (batch_size, 1, 6, 7)
             s_batch = torch.stack([s1 for (s1,*a,r,s2,m,d) in minibatch]).unsqueeze(1).to(self.device)
             s_prime_batch = torch.stack([s2 for (s1,*a,r,s2,m,d) in minibatch]).unsqueeze(1).to(self.device)
+            # input channel=3 test
+            s_batch = torch.stack([s1 for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)
+            s_prime_batch = torch.stack([s2 for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)
             
         else:
             # state_batch.shape: (batch_size, 42)
-            state1_batch = torch.stack([s1 for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)
-            state2_batch = torch.stack([s2 for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)
+            s_batch = torch.stack([s1 for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)
+            s_prime_batch = torch.stack([s2 for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)
 
         # action_batch.shape: (batch_size, )
         a_batch = torch.Tensor([a[0] for (s1,*a,r,s2,m,d) in minibatch]).to(self.device)

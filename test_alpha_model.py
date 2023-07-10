@@ -18,21 +18,21 @@ X_mark = "\033[31mX\033[0m"
 O_mark = "\033[33mO\033[0m"
 do_I_play = False
 greedy = True
-temperature = None if greedy else 0.1
+temperature = None if greedy else 0.5
 
 
-nb1, hl1, model1_name = 9,128,'model_18/model_18_iter_7.pth'
+nb1, hl1, model1_name = 5,128,'model_20/model_20_iter_4.pth'
 args = {
     'C': 1,
-    'num_searches': 350,
+    'num_searches': 100,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
 }
 
-nb2, hl2, model2_name = 9,128,'model_19/model_19_iter_7.pth'
+nb2, hl2, model2_name = 5,128,'model_6/model_6_iter_3.pth'
 args2 = {
-        'C': 1,
-        'num_searches': 350,
+        'C': 2,
+        'num_searches': 800,
         'dirichlet_epsilon': 0.,
         'dirichlet_alpha': 0.3
 }
@@ -136,8 +136,10 @@ while True:
             if greedy:
                 action = np.argmax(mcts_probs)
             else:
+                print(mcts_probs)
                 mcts_temp_probs = mcts_probs ** (1/temperature)
                 mcts_temp_probs /= mcts_temp_probs.sum()
+                print(mcts_temp_probs)
                 action = np.random.choice(range(7),p=mcts_temp_probs)
         else:
             # print("state", state)

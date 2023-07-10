@@ -16,7 +16,7 @@ kwargs={
     'use_nash':prev_model_config['use_nash']
 }
 agent = ConnectFourDQNAgent(config_file_name=None, **kwargs)
-print(agent.use_resnet)
+#print(agent.use_resnet)
 # 불러온 모델 파일로 모델 업로드
 load_model(agent.policy_net, filename=folder_path+'/'+model_name)
 agent.eps = 0
@@ -24,14 +24,14 @@ agent.eps = 0
 
 state = [
     [ 0, 0, 0, 0, 0, 0, 0],
-    [ 0, 0, 0, 0, 0, 0, 0],
-    [ 0, 0, 0, 0, 0, 0, 0],
     [ 0, 0, 0,-1, 0, 0, 0],
-    [ 0, 0, 0,-1, 0, 0, 0],
-    [ 0, 0, 0, 1, 1, 0, 0]
+    [ 0, 0,-1,-1, 0, 0, 0],
+    [ 0, 0, 1, 1, 0, 0, 0],
+    [ 0, 0,-1,-1, 0, 0, 0],
+    [ 1, 0, 1, 1, 0, 0, 0]
 ]
 state = torch.tensor(state).float().unsqueeze(0).unsqueeze(0).to('cuda')
-print(agent.policy_net(state))
+print(agent.policy_net(state).reshape(7,7))
 
 
 # 수능처럼 점수를 계산하자

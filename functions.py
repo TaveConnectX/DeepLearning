@@ -42,6 +42,18 @@ def load_model(model, filename='Model'):
 def clear():
     os.system('cls' if os.name=='nt' else 'clear')
 
+
+def get_encoded_state(state):
+        encoded_state = np.stack(
+            (state == -1, state == 0, state == 1)
+        ).astype(np.float32)
+        
+        if len(state.shape) == 3:
+            encoded_state = np.swapaxes(encoded_state, 0, 1)
+        
+        return encoded_state
+
+
 # env의 board를 normalize 해주는 함수 
 # 2를 -1로 바꿔서 board를 -1~1로 바꿔줌
 def board_normalization(noise:bool,env, use_conv:bool):

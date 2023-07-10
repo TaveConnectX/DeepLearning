@@ -14,7 +14,7 @@ from functions import get_current_time
 
 num_blocks, num_hidden = 5, 128
 args = {
-    'C': 2,
+    'C': 4,
     'num_searches': 600,
     'num_iterations': 8,
     'num_selfPlay_iterations': 5000,
@@ -95,8 +95,8 @@ scheduler = torch.optim.lr_scheduler.OneCycleLR( \
             epochs=args['num_epochs'],
             anneal_strategy='linear'
         )
-optimizer = torch.optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-4)
-scheduler = None
+# optimizer = torch.optim.Adam(model.parameters(), lr=0.002, weight_decay=1e-4)
+# scheduler = None
 # defalut parameter in code
 # with 9 resnet block and 128 batch
 # args = {

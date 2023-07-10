@@ -15,7 +15,7 @@ from functions import board_normalization, \
     get_model_config, set_optimizer, \
     get_distinct_actions, is_full_after_my_turn, \
     softmax_policy, get_valid_actions, get_next_board, \
-    get_current_time
+    get_current_time, get_encoded_state
 from ReplayBuffer import RandomReplayBuffer
 # models.py 분리 후 이동, 정상 작동하면 지울 듯 
 # import torch.nn.init as init
@@ -96,6 +96,7 @@ class ConnectFourDQNAgent(nn.Module):
                                    use_resnet=self.use_resnet,
                                    use_minimax=self.use_minimax
                                    ).model
+        
         # 실제 업데이트되는 network
 
         # target network
@@ -184,15 +185,15 @@ class ConnectFourDQNAgent(nn.Module):
     # 내쉬 균형 찾는 코드 참고 
     def get_nash_prob_and_value(self,payoff_matrix, vas, das, iterations=50):
         if isinstance(payoff_matrix, torch.Tensor):    
-            payoff_matrix = payoff_matrix.clone().detach().reshape(7,7)
+            payoff_matrix = payoff_matrix.clone().detach().cpu().numpy().reshape(7,7)
         elif isinstance(payoff_matrix, np.ndarray):
             payoff_matrix = payoff_matrix.reshape(7,7)
         payoff_matrix = payoff_matrix[vas][:,vas]
         
         '''Return the oddments (mixed strategy ratios) for a given payoff matrix'''
-        transpose_payoff = torch.transpose(payoff_matrix,0,1)
-        row_cum_payoff = torch.zeros(len(payoff_matrix)).to(self.device)
-        col_cum_payoff = torch.zeros(len(transpose_payoff)).to(self.device)
+        transpose_payoff = np.transpose(payoff_matrix)
+        row_cum_payoff = np.zeros(len(payoff_matrix))
+        col_cum_payoff = np.zeros(len(transpose_payoff))
 
         col_count = np.zeros(len(transpose_payoff))
         row_count = np.zeros(len(payoff_matrix))
@@ -200,10 +201,10 @@ class ConnectFourDQNAgent(nn.Module):
         for i in range(iterations):
             row_count[active] += 1 
             col_cum_payoff += payoff_matrix[active]
-            active = torch.argmin(col_cum_payoff)
+            active = np.argmin(col_cum_payoff)
             col_count[active] += 1 
             row_cum_payoff += transpose_payoff[active]
-            active = torch.argmax(row_cum_payoff)
+            active = np.argmax(row_cum_payoff)
             
         value_of_game = (max(row_cum_payoff) + min(col_cum_payoff)) / 2.0 / iterations  
         row_prob = row_count / iterations
@@ -295,10 +296,14 @@ class ConnectFourDQNAgent(nn.Module):
             
         with torch.no_grad():
             state_ = torch.FloatTensor(state).to(self.device)
+            
             # CNN일 때만 차원을 바꿔줌 
             if self.use_conv:
-                state_ = state_.reshape(6,7)
-                state_ = state_.unsqueeze(0).unsqueeze(0)  # (6,7) -> (1,1,6,7)
+                # input channel=3 test
+                # state_ = state_.reshape(6,7)
+                # state_ = state_.unsqueeze(0).unsqueeze(0)  # (6,7) -> (1,1,6,7)
+                state_ = state_.unsqueeze(0)
+               
             else: state_ = state_.flatten()
 
             q_value = self.policy_net(state_)
@@ -342,6 +347,7 @@ class ConnectFourDQNAgent(nn.Module):
                 # print("q_value:",q_value)
                 
                 valid_q_values = q_value.squeeze()[torch.tensor(valid_actions)].to(self.device)
+                
                 valid_index_q_values = torch.stack([torch.tensor(valid_actions).to(self.device), valid_q_values], dim=0)
                 
                 valid_index_q_values = torch.transpose(valid_index_q_values,0,1)
@@ -389,7 +395,10 @@ class ConnectFourDQNAgent(nn.Module):
             env.reset()
 
             state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
-            state = torch.from_numpy(state_).float()
+            
+            # state = torch.from_numpy(state_).float()
+            # input channel=3 test
+            state = torch.tensor(get_encoded_state(state_))
             done = False
 
             past_state, past_action, past_reward, past_done = state, None, None, done
@@ -437,8 +446,10 @@ class ConnectFourDQNAgent(nn.Module):
                     
                         
                 op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
-                op_state = torch.from_numpy(op_state_).float() 
-
+                # op_state = torch.from_numpy(op_state_).float() 
+                # input channel=3 test
+                op_state = torch.tensor(get_encoded_state(op_state_))
+            
                 if past_action is not None:  # 맨 처음이 아닐 때 
                     # 경기가 끝났을 때(중요한 경험)
                     if done:
@@ -530,7 +541,10 @@ class ConnectFourDQNAgent(nn.Module):
                 action = random.randint(0,6)
                 env.step(action)
             state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=self.use_conv)
-            state = torch.from_numpy(state_).float()
+            # state = torch.from_numpy(state_).float()
+            # input channel=3 test
+            state = torch.tensor(get_encoded_state(state_))
+            
             done = False
 
             
@@ -569,8 +583,10 @@ class ConnectFourDQNAgent(nn.Module):
                 # print(mask)
                 # print()
                 op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=self.use_conv)
-                op_state = torch.from_numpy(op_state_).float() 
-
+                # op_state = torch.from_numpy(op_state_).float() 
+                # input channel=3 test
+                op_state = torch.tensor(get_encoded_state(op_state_))
+            
                 # 경기가 끝났을 때(중요한 경험)
                 if done:
                     # 중요한 경험일 때는 더 많이 memory에 추가해준다(optional)
@@ -590,7 +606,7 @@ class ConnectFourDQNAgent(nn.Module):
                             
                 # 아직 안끝났으면,
                 if self.selfplay:
-                    op_real_action, _ = players[2].select_action(op_state, env, player=turn)
+                    op_real_action, _ = players[2].select_action(op_state, env, player=2//turn)
                     op_observation, op_reward, op_done = env.step(op_real_action) 
                 else:
                     op_observation, op_reward, op_done = env.step(op_action)
@@ -614,17 +630,22 @@ class ConnectFourDQNAgent(nn.Module):
                         mask[da,da] = 0   
 
                 next_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
-                next_state = torch.from_numpy(next_state_).float() 
+                # next_state = torch.from_numpy(next_state_).float() 
+                # input channel=3 test
+                next_state = torch.tensor(get_encoded_state(next_state_))
+            
                   
                 
                 self.memory.add(state, action, op_action, reward-op_reward, next_state, mask,done)
-                # print("s:\n",torch.round(state).reshape(6,7).int())
-                # print("a:\n", action)
-                # print("b:\n", op_action)
-                # print("r:\n", reward-op_reward)
-                # print("s_prime\n", torch.round(next_state).reshape(6,7).int())
-                # print("m:\n", mask.reshape(7,7).int())
-                # print("d:\n", done)
+                # if reward-op_reward < 0:
+
+                #     print("s:\n",torch.round(state).reshape(6,7).int())
+                #     print("a:\n", action)
+                #     print("b:\n", op_action)
+                #     print("r:\n", reward-op_reward)
+                #     print("s_prime\n", torch.round(next_state).reshape(6,7).int())
+                #     print("m:\n", mask.reshape(7,7).int())
+                #     print("d:\n", done)
 
                             
                          
@@ -707,7 +728,10 @@ class ConnectFourDQNAgent(nn.Module):
             env.reset()
 
             state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
-            state = torch.from_numpy(state_).float()
+            # state = torch.from_numpy(state_).float()
+            # input channel=3 test
+            state = torch.tensor(get_encoded_state(state_))
+            
             done = False
 
             past_state, past_action, past_reward, past_done = state, None, None, done
@@ -749,7 +773,10 @@ class ConnectFourDQNAgent(nn.Module):
                     
                         
                 op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
-                op_state = torch.from_numpy(op_state_).float() 
+                # op_state = torch.from_numpy(op_state_).float() 
+                # input channel=3 test
+                op_state = torch.tensor(get_encoded_state(op_state_))
+            
 
                 if past_action is not None:  # 맨 처음이 아닐 때 
                     # 경기가 끝났을 때(중요한 경험)
@@ -1182,7 +1209,6 @@ class ConnectFourDQNAgent(nn.Module):
         # target Q value들 
         
     
-
 
         if self.use_minimax and self.double_dqn:
             mask_q = self.policy_net(s_prime_batch).reshape(-1,7,7) * m_batch
@@ -1740,10 +1766,14 @@ class HeuristicAgent():
 
     # normalize 된 board를 다시 1과 2로 바꿔줌
     def arr2board(self, state):
-        state_ = copy.deepcopy(np.array(state.reshape(6,7)))
-        state_ = np.round(state_).astype(int)
-        state_[state_==-1] = 2
-
+        # state_ = copy.deepcopy(np.array(state.reshape(6,7)))
+        # state_ = np.round(state_).astype(int)
+        # state_[state_==-1] = 2
+        # input channel=3 test
+        state_ = np.zeros((6,7))
+        state_[state[0].cpu()==1] = -1
+        state_[state[1].cpu()==1] = 0
+        state_[state[2].cpu()==1] = 1
         return state_
     
     def put_piece(self, board, col, player):
@@ -1758,7 +1788,7 @@ class HeuristicAgent():
         valid_actions = env.valid_actions
 
         if state.ndim == 1: state = state.reshape(6,7)
-        rows, cols = state.shape
+        rows, cols = 6,7
 
         board = self.arr2board(state)
         # print(state, board)
@@ -2265,7 +2295,8 @@ class AlphaZeroParallel:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            self.scheduler.step()
+            if self.scheduler is not None:
+                self.scheduler.step()
             self.steps += 1
 
             

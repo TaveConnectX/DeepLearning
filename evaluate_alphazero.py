@@ -3,8 +3,8 @@ from functions import load_model, get_model_and_config_name, \
                     get_model_config
 from agent_structure import ConnectFourRandomAgent, HeuristicAgent, MinimaxAgent
 # from alphazero_new import ConnectFour, ResNet, MCTS
-from env import ConnectFourEnv, board_normalization, ConnectFour, MCTS
-from models import AlphaZeroResNet
+from env import ConnectFourEnv, board_normalization, ConnectFour, MCTS, MCTS_alphago
+from models import AlphaZeroResNet, ResNetforDQN
 import numpy as np
 import torch
 import random
@@ -15,11 +15,11 @@ import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 use_search = False
-
+alphazero = False
 CF = ConnectFour()
 print("what the...")
 args = {
-    'C': 0.5,
+    'C': 1,
     'num_searches': 100,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
@@ -28,12 +28,22 @@ args = {
 
 player = np.random.choice([1,-1])
 
-model_num, iter = 19, 7
-model = AlphaZeroResNet(9,128).to(device)
-model.load_state_dict(torch.load("model/alphazero/model_{}/model_{}_iter_{}.pth".format(model_num,model_num,iter), map_location=device))
-model.eval()
+# alphago 일 경우
+if not alphazero:
+    model = ResNetforDQN(num_blocks=5,num_hidden=128,action_size=49)
+    model.load_state_dict(torch.load("model/model_67/Model67_DQN-resnet-minimax-v1.pth", map_location=device))
+    model.eval()
 
-mcts = MCTS(CF, args, model)
+    mcts = MCTS_alphago(CF, args, model,value_model=None)
+
+
+# alphazero 일 경우
+else:
+    model_num, iter = 21, 3
+    model = AlphaZeroResNet(5,128).to(device)
+    model.load_state_dict(torch.load("model/alphazero/model_{}/model_{}_iter_{}.pth".format(model_num,model_num,iter), map_location=device))
+    model.eval()
+    mcts = MCTS(CF, args, model)
 
 # state = CF.get_initial_state()
 
@@ -60,7 +70,34 @@ def get_encoded_state(state):
     
     return encoded_state
 
+def get_nash_prob_and_value(payoff_matrix, vas, iterations=50):
+    if isinstance(payoff_matrix, torch.Tensor):    
+        payoff_matrix = payoff_matrix.clone().detach().cpu().numpy().reshape(7,7)
+    elif isinstance(payoff_matrix, np.ndarray):
+        payoff_matrix = payoff_matrix.reshape(7,7)
+    payoff_matrix = payoff_matrix[vas][:,vas]
+    
+    '''Return the oddments (mixed strategy ratios) for a given payoff matrix'''
+    transpose_payoff = np.transpose(payoff_matrix)
+    row_cum_payoff = np.zeros(len(payoff_matrix))
+    col_cum_payoff = np.zeros(len(transpose_payoff))
 
+    col_count = np.zeros(len(transpose_payoff))
+    row_count = np.zeros(len(payoff_matrix))
+    active = 0
+    for i in range(iterations):
+        row_count[active] += 1 
+        col_cum_payoff += payoff_matrix[active]
+        active = np.argmin(col_cum_payoff)
+        col_count[active] += 1 
+        row_cum_payoff += transpose_payoff[active]
+        active = np.argmax(row_cum_payoff)
+        
+    value_of_game = (max(row_cum_payoff) + min(col_cum_payoff)) / 2.0 / iterations  
+    row_prob = row_count / iterations
+    col_prob = col_count / iterations
+    
+    return row_prob, col_prob, value_of_game
 
 def compare_model(model1, model2, n_battle=10):
     players = {1:model1, 2:model2}
@@ -86,18 +123,39 @@ def compare_model(model1, model2, n_battle=10):
             else:
                 a_cnt += 1
                 # print("{},{}prev".format(round,a_cnt))
+                valid_moves = (state_[0] == 0).astype(np.uint8)
                 if not use_search:
-                    encoded_state =  torch.tensor(get_encoded_state(state), device=device).unsqueeze(0)
-                    action_probs, value = players[turn](encoded_state)
-                    valid_moves = (state_[0] == 0).astype(np.uint8)
-                    
-                    #print(action_probs, value, valid_moves)
-                    action_probs = action_probs.detach().cpu().numpy() * valid_moves
+                    if alphazero:
+                        encoded_state =  torch.tensor(get_encoded_state(state), device=device).unsqueeze(0)
+                        action_probs, value = players[turn](encoded_state)
+                        #print(action_probs, value, valid_moves)
+                        action_probs = action_probs.detach().cpu().numpy() * valid_moves
 
-                    action_probs /= np.sum(action_probs)
+                        action_probs /= np.sum(action_probs)
+                        action = np.argmax(action_probs)
+                        
+                    else:
+                        encoded_state = state.clone().detach().to(device).unsqueeze(0).unsqueeze(0)
+                        
+                        q_values = players[turn](encoded_state)
+                        print(q_values.reshape(7,7))
+                        # prints()
+                        vas = np.where(valid_moves==1)[0]
+                        action_probs, op_action_probs, value = get_nash_prob_and_value(q_values,vas)
+                        action_probs = action_probs/action_probs.sum()
+                        
+                        # action = np.random.choice(vas, p=action_probs)
+                        action = vas[np.argmax(action_probs)]
+                        print(state)
+                        print(action_probs, op_action_probs, value)
+                        print(action)
+                        
+                    
+                    
+                    
                     # print(state_)
                     # print(np.round(action_probs,3), value)
-                    action = np.argmax(action_probs)
+                    
                 
                 else:
                     mcts_probs = mcts.search(state_)
