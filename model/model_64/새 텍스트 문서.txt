@@ -1,0 +1,3 @@
+negamax dqn
+random model 로 1000번 학습함 
+대략 20점 

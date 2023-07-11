@@ -1,0 +1,20 @@
+{
+    "epi": 10000,
+    "gamma": 0.99,
+    "lr": 0.0001,
+    "batch_size": 128,
+    "target_update": 54,
+    "eps":1,
+    "memory_len": 20000,
+    "repeat_reward": 1,
+    "optimizer":"Adam",
+    
+    "op_agent":"Heuristic",
+    "selfplay":true,
+    "add_pool_freq":300,
+
+    "use_conv":true,
+    "use_resnet":true,
+    "use_minimax":true,
+    "next_state_is_op_state":false
+}

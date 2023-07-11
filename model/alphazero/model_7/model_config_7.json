@@ -1,0 +1,16 @@
+{
+    "C": 4,
+    "num_searches": 1000,
+    "num_iterations": 8,
+    "num_selfPlay_iterations": 1000,
+    "num_parallel_games": 100,
+    "num_epochs": 2,
+    "batch_size": 64,
+    "temperature": 1,
+    "dirichlet_epsilon": 0.5,
+    "dirichlet_alpha": 1,
+    "train_time": "20230705_234742",
+    "num_blocks": 64,
+    "num_hidden": 3,
+    "model_num": 7
+}

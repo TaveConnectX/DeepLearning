@@ -1,0 +1,12 @@
+{
+    "model_type": "CNN-v1",
+    "op_model_type": "Random",
+    "epi": 10000,
+    "gamma": 0.99,
+    "learning rate": 0.004315892712310481,
+    "batch_size": 21,
+    "target_update": 54,
+    "memory_len": 10395,
+    "repeat_reward": 1,
+    "win_rate": 0.84
+}
