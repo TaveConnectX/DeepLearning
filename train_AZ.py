@@ -14,9 +14,9 @@ from functions import get_current_time
 
 num_blocks, num_hidden = 5, 128
 args = {
-    'C': 4,
+    'C': 2,
     'num_searches': 600,
-    'num_iterations': 8,
+    'num_iterations': 3,
     'num_selfPlay_iterations': 5000,
     'num_parallel_games': 1000,
     'num_epochs': 2,
@@ -84,7 +84,7 @@ model = AlphaZeroResNet(
     num_hidden=num_hidden
 ).to(device)
 
-# model.load_state_dict(torch.load('model/alphazero/model_8/model_8_iter_7.pth'))
+model.load_state_dict(torch.load('model/alphazero/model_21/model_21_iter_4.pth'))
 
 optimizer = torch.optim.SGD(model.parameters(), lr=0.02, weight_decay=0.0001)
 

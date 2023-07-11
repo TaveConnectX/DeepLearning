@@ -69,9 +69,10 @@ def compare_model(model1, model2, n_battle=10):
             turn = comp_env.player
             state_ = board_normalization(noise=False,env=comp_env, model_type=players[turn].policy_net.model_type)
             
-            # state = torch.from_numpy(state_).float()
-            # input channel=3 test
-            state = torch.tensor(get_encoded_state(state_))
+            if players[turn].use_conv:
+                # input channel=3 test
+                state = torch.tensor(get_encoded_state(state_))
+            else: state = torch.from_numpy(state_).float()
 
             action = players[turn].select_action(state, comp_env, player=turn)
             if isinstance(action, tuple):
@@ -445,6 +446,7 @@ class MCTS:
         policy, _ = self.model(
             torch.tensor(self.game.get_encoded_state(state), device=self.model.device).unsqueeze(0)
         )
+        
         policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
         policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
             * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
@@ -611,7 +613,7 @@ class Node_alphago:
             q_value = 0
         else:
             # child와 parent는 적이므로 1에서 빼주기로 한다 
-            q_value = 1 - ((child.value_sum / child.visit_count) + 1) / 2
+            q_value = -(child.value_sum / child.visit_count)
         return q_value + self.args['C'] * (math.sqrt(self.visit_count) / (child.visit_count + 1)) * child.prior
     
     def expand(self, policy):
@@ -653,6 +655,8 @@ class MCTS_alphago:
     def board_normalization(self,state):
         return torch.tensor(state, device=self.model.device).float().unsqueeze(0).unsqueeze(0)
 
+
+    
     def get_nash_prob_and_value(self,payoff_matrix, vas, iterations=50):
         if isinstance(payoff_matrix, torch.Tensor):    
             payoff_matrix = payoff_matrix.clone().detach().reshape(7,7)
@@ -684,25 +688,64 @@ class MCTS_alphago:
         return row_prob, col_prob, value_of_game
     
 
+    def softmax(self, lst, temperature=1.0):
+        # Scale the input values by the temperature
+        scaled_lst = [x / temperature for x in lst]
+        
+        # Compute the sum of exponential values for each element
+        exp_sum = sum(math.exp(x) for x in scaled_lst)
+        
+        # Apply softmax function for each element
+        softmax_lst = [math.exp(x) / exp_sum for x in scaled_lst]
+        
+        return softmax_lst
+    
+    def get_minimax_prob_and_value(self, q_value, vas):
+        # q_value = q_value.clone().detach().reshape(7,7)
+        q_value = q_value.squeeze()
+        vas = np.where(np.array(vas) == 1)[0]
+        # q_value = q_value[vas][:,vas]
+        q_dict = {}
+        for a in vas:
+            q_dict[a] = []
+            for b in vas:
+                idx = 7*a + b
+
+                q_dict[a].append((b, -q_value[idx]))
+            
+            maxidx = torch.tensor(q_dict[a]).argmax(dim=0)[1]
+
+            op_action, value = q_dict[a][maxidx]
+            q_dict[a] = (op_action, -1*value)
+
+        qs_my_turn = [value[1] for key, value in q_dict.items()]
+        
+        policy = self.softmax(qs_my_turn, temperature=0.05)
+        value = max(qs_my_turn)
+
+        return policy, value
+        
+
     @torch.no_grad()
     def search(self, state):
         root = Node_alphago(self.game, self.args, state, visit_count=1)
         
         # policy 만드는 부분을 바꿔야됨 
         q_values = self.model(
-            self.board_normalization(state)
+            torch.tensor(get_encoded_state(state)).unsqueeze(0).to(self.model.device)
         )
         valid_moves = self.game.get_valid_moves(state)
         # print(q_values)
         # print(valid_moves)
-        pa, pb, v = self.get_nash_prob_and_value(q_values, valid_moves)
+        # pa, pb, v = self.get_nash_prob_and_value(q_values, valid_moves)
+        pa, v = self.get_minimax_prob_and_value(q_values, valid_moves)
         policy = np.zeros_like(valid_moves, dtype=float)
         policy[np.array(valid_moves) == 1] = pa
-        print(policy, v)
+        # print(policy, v)
         # print(np.array(valid_moves) == 1,policy,pa,pb, v)
         # policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
-        policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
-            * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
+        # policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
+        #     * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
         policy *= valid_moves
         policy /= policy.sum()
 
@@ -719,17 +762,18 @@ class MCTS_alphago:
             
             if not is_terminal:
                 q_values = self.model(
-                    self.board_normalization(node.state)
+                    torch.tensor(get_encoded_state(node.state)).unsqueeze(0).to(self.model.device)
                 )
                 valid_moves = self.game.get_valid_moves(node.state)
                 # print(node.state, valid_moves)
                 # print(q_values)
                 # print(valid_moves)
-                pa, pb, value = self.get_nash_prob_and_value(q_values, valid_moves)
+                # pa, pb, value = self.get_nash_prob_and_value(q_values, valid_moves)
+                pa, value = self.get_minimax_prob_and_value(q_values, valid_moves)
                 policy = np.zeros_like(valid_moves, dtype=float)
                 policy[np.array(valid_moves) == 1] = pa
-                policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
-            * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
+            #     policy = (1 - self.args['dirichlet_epsilon']) * policy + self.args['dirichlet_epsilon'] \
+            # * np.random.dirichlet([self.args['dirichlet_alpha']] * self.game.action_size)
                 
                 policy *= valid_moves
                 policy /= policy.sum()
@@ -748,9 +792,11 @@ class MCTS_alphago:
                 # value network에 넣어보기 
                 # value_from_net = self.get_value_from_net(node.state)
                 # value_net 이 완성되기 전까진 nash value로 대체
-                value_from_net = value
+                value_from_net = self.get_value_from_net(node.state)
+                
+                
                 # 둘을 평균낸 것을 value로 쓴다
-                value = (1-0.5) * value_r + 0.5 * value_from_net
+                value = (1-0.2) * value_r + 0.2 * value_from_net
                 
             node.backpropagate(value)    
             
@@ -764,10 +810,15 @@ class MCTS_alphago:
     
     def get_rollout_value(self, state):
         # 끝날 때까지 둬보기
+        # 시간을 매우 많이 잡아먹으므로 Q-value 로 대체
         pass
     
     def get_value_from_net(self, state):
+        v_idx = torch.argmax(self.value_model(torch.FloatTensor(state).flatten().to(self.model.device)))
+        if v_idx==0: value_from_net = 1
+        elif v_idx==1: value_from_net = 0
+        elif v_idx==2: value_from_net = -1
+        else: exit()
 
-        # 
-        return self.value_model(state)
+        return value_from_net
 

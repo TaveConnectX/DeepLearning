@@ -16,7 +16,7 @@ from functions import get_model_config, get_model_and_config_name,\
 
 X_mark = "\033[31mX\033[0m"
 O_mark = "\033[33mO\033[0m"
-do_I_play = False
+do_I_play = True
 greedy = True
 temperature = None if greedy else 0.5
 
@@ -29,10 +29,10 @@ args = {
     'dirichlet_alpha': 0.3
 }
 
-nb2, hl2, model2_name = 5,128,'model_6/model_6_iter_3.pth'
+nb2, hl2, model2_name = 5,128,'model_20/model_20_iter_6.pth'
 args2 = {
-        'C': 2,
-        'num_searches': 800,
+        'C': 1,
+        'num_searches': 100,
         'dirichlet_epsilon': 0.,
         'dirichlet_alpha': 0.3
 }
@@ -104,7 +104,7 @@ print("what the...")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = AlphaZeroResNet(nb1, hl1).to(device)
+model = AlphaZeroResNet(3, nb1, hl1).to(device)
 model.load_state_dict(torch.load(folder_path+model1_name, map_location=device))
 model.eval()
 
@@ -116,7 +116,7 @@ pointer = 3
 op_pointer = 3
 
 if not do_I_play:
-    model2 = AlphaZeroResNet(nb2,hl2).to(device)
+    model2 = AlphaZeroResNet(3, nb2,hl2).to(device)
     model2.load_state_dict(torch.load(folder_path+model2_name, map_location=device))
     model2.eval()
 

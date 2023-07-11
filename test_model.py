@@ -7,8 +7,8 @@ import os
 import copy
 import random
 import keyboard
-from agent_structure import ConnectFourDQNAgent, MinimaxAgent, AlphaZeroAgent
-from functions import get_model_config, get_model_and_config_name
+from agent_structure import ConnectFourDQNAgent, MinimaxAgent, AlphaZero
+from functions import get_model_config, get_model_and_config_name, get_encoded_state
 
 
 
@@ -126,7 +126,9 @@ while CF.win==0:
 
         time.sleep(thinking_time)
         state_ = env.board_normalization(False,CF, agent.policy_net.model_type)
-        state = torch.from_numpy(state_).float()
+        if agent.use_conv:
+            state = torch.tensor(get_encoded_state(state_))
+        else: state = torch.from_numpy(state_).float()
         action = agent.select_action(state, CF, player=CF.player)
         # print(agent.policy_net(state))
         print(action)

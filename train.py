@@ -10,7 +10,8 @@ import time
 import matplotlib.pyplot as plt
 import os
 from functions import get_model_config, save_model, \
-                        get_current_time, get_model_and_config_name, load_model
+                        get_current_time, get_model_and_config_name, load_model, \
+                        get_encoded_state
 from agent_structure import ConnectFourDQNAgent, HeuristicAgent, set_op_agent
 
 def seed_everything(seed: int = 42):
@@ -178,7 +179,10 @@ if mode == '1':
         else:
             time.sleep(1)
             state_ = env.board_normalization(False,CFenv, Qagent.policy_net.model_type)
-            state = torch.from_numpy(state_).float()
+            
+            if Qagent.use_conv:
+                state = torch.tensor(get_encoded_state(state_))
+            else: state = torch.from_numpy(state_).float()
             action = Qagent.select_action(state, CFenv, player=CFenv.player)
             if isinstance(action, tuple):
                 action = action[0]

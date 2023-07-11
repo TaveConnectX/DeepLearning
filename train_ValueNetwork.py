@@ -1,5 +1,5 @@
 from functions import get_model_and_config_name, board_normalization, \
-                        load_model
+                        load_model, get_encoded_state
 import env
 from agent_structure import ConnectFourDQNAgent
 from models import *
@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import copy
 
 '''
 # 학습 데이터 예시 형식
@@ -100,7 +101,7 @@ SL_agent.eps, RL_agent.eps = 0.05, 0.05  # 되도록 greedy 한 action을 취하
 VEnv = env.ConnectFourEnv()
 
 # 전역변수 설정
-total_count = 1000
+total_count = 10000
 learn_count = int(total_count * 0.8)
 test_count = total_count - learn_count
 
@@ -113,7 +114,8 @@ for i in range(0, total_count) :
     VEnv.reset()
 
     state_ = board_normalization(noise=False, env=VEnv, use_conv=SL_agent.use_conv)
-    state = torch.from_numpy(state_).float()
+    # state = torch.from_numpy(state_).float()
+    state = torch.tensor(get_encoded_state(state_))
 
     use_rl = False  # RL 에이전트를 사용할 턴인지 여부
     rl_start_turn = random.randint(1, 20)  # RL 에이전트를 사용하기 시작하는 턴 (랜덤으로 지정)
@@ -141,15 +143,14 @@ for i in range(0, total_count) :
 
         # 선택한 action으로 환경 진행
         state, reward, done = VEnv.step(action)
-
         # RL 에이전트 사용 여부 결정
         if turn == rl_start_turn:
-            important_state = state[:]
+            important_state = copy.deepcopy(state[:])
             use_rl = True
             #print(turn,important_state)
         
         if (use_rl == False) :
-            important_state = state
+            important_state = copy.deepcopy(state)
 
         if done:
             # 리워드 값 정리
@@ -184,6 +185,9 @@ for i in range(0, total_count) :
             data.append(tmp)
             break
 
+        state = torch.tensor(get_encoded_state(state))
+
+
 # 데이터 잘 수집되었는지 확인 
 # for i,d in enumerate(data) :
 #     # print(i, d)
@@ -200,6 +204,7 @@ for i in range(0, learn_count) :
     inputs = torch.FloatTensor(data[i][0])
     print(inputs)
     targets = torch.FloatTensor(data[i][1]).unsqueeze(0)  
+    targets = targets.squeeze()
 
     # 경사 초기화
     optimizer.zero_grad()
@@ -227,8 +232,8 @@ for i in range(learn_count, len(data)) :
 
     # 시그모이드를 적용하여 확률을 횓극
     probabilities = torch.sigmoid(outputs)  
-    _, predicted = torch.max(probabilities.data, 1)
-    Predicted_label = predicted.item()
+    print(probabilities)
+    Predicted_label = torch.argmax(probabilities.data)
     # 라벨 기존 데이터 형식과 맞게 변환
     if data[i][1] == [1,0,0] :
         real_label = 0

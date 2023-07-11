@@ -1,7 +1,7 @@
 import torch
 from agent_structure import ConnectFourDQNAgent, evaluate_model
 from functions import load_model, get_model_and_config_name, \
-                    get_model_config
+                    get_model_config, get_encoded_state
 # 폴더에서 모델 불러오기
 folder_path = 'model/model_for_evaluate'
 model_name, model_config = get_model_and_config_name(folder_path)
@@ -30,8 +30,9 @@ state = [
     [ 0, 0,-1,-1, 0, 0, 0],
     [ 1, 0, 1, 1, 0, 0, 0]
 ]
-state = torch.tensor(state).float().unsqueeze(0).unsqueeze(0).to('cuda')
-print(agent.policy_net(state).reshape(7,7))
+# state = torch.tensor(state).float().unsqueeze(0).unsqueeze(0).to('cuda')
+# state = torch.tensor(get_encoded_state(np.array(state))).unsqueeze(0).to('cuda')
+# print(agent.policy_net(state).reshape(7,7))
 
 
 # 수능처럼 점수를 계산하자

@@ -24,6 +24,7 @@ from models import DQNModel, HeuristicModel, RandomModel, MinimaxModel, \
                     AlphaZeroResNet
 import json
 import matplotlib.pyplot as plt
+from sys import exit
 
 # editable hyperparameters
 # let iter=10000, then
@@ -310,14 +311,15 @@ class ConnectFourDQNAgent(nn.Module):
 
             # print(env.board)
             # print(((q_value.reshape(7,7)*100).int()/100.).v)
+            
 
             if True in torch.isnan(q_value):
-                print( q_value.reshape(7,7))
-                print(state)
-                print(state_)
+                print( q_value)
+                print(state, state.shape)
+                print(state_, state_.shape)
                 print(env.board)
+                print(self.policy_net)
                 exit()
-                print()
             # temp=0 은 greedy action을 의미하므로
             temp = 0 if self.softmax_const < self.eps else self.temp
 
@@ -395,10 +397,11 @@ class ConnectFourDQNAgent(nn.Module):
             env.reset()
 
             state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
-            
-            # state = torch.from_numpy(state_).float()
-            # input channel=3 test
-            state = torch.tensor(get_encoded_state(state_))
+            if self.use_conv:
+                # input channel=3 test
+                state = torch.tensor(get_encoded_state(state_))
+            else:
+                state = torch.from_numpy(state_).float()
             done = False
 
             past_state, past_action, past_reward, past_done = state, None, None, done
@@ -446,9 +449,11 @@ class ConnectFourDQNAgent(nn.Module):
                     
                         
                 op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
-                # op_state = torch.from_numpy(op_state_).float() 
+                
                 # input channel=3 test
-                op_state = torch.tensor(get_encoded_state(op_state_))
+                if self.use_conv:
+                    op_state = torch.tensor(get_encoded_state(op_state_))
+                else: op_state = torch.from_numpy(op_state_).float() 
             
                 if past_action is not None:  # 맨 처음이 아닐 때 
                     # 경기가 끝났을 때(중요한 경험)
@@ -541,10 +546,11 @@ class ConnectFourDQNAgent(nn.Module):
                 action = random.randint(0,6)
                 env.step(action)
             state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=self.use_conv)
-            # state = torch.from_numpy(state_).float()
-            # input channel=3 test
-            state = torch.tensor(get_encoded_state(state_))
             
+            if self.use_conv:
+                # input channel=3 test
+                state = torch.tensor(get_encoded_state(state_))
+            else: state = torch.from_numpy(state_).float()
             done = False
 
             
@@ -583,10 +589,13 @@ class ConnectFourDQNAgent(nn.Module):
                 # print(mask)
                 # print()
                 op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=self.use_conv)
-                # op_state = torch.from_numpy(op_state_).float() 
-                # input channel=3 test
-                op_state = torch.tensor(get_encoded_state(op_state_))
-            
+                
+
+                if self.use_conv:
+                    # input channel=3 test
+                    op_state = torch.tensor(get_encoded_state(op_state_))
+                else: op_state = torch.from_numpy(op_state_).float() 
+
                 # 경기가 끝났을 때(중요한 경험)
                 if done:
                     # 중요한 경험일 때는 더 많이 memory에 추가해준다(optional)
@@ -630,9 +639,11 @@ class ConnectFourDQNAgent(nn.Module):
                         mask[da,da] = 0   
 
                 next_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
-                # next_state = torch.from_numpy(next_state_).float() 
-                # input channel=3 test
-                next_state = torch.tensor(get_encoded_state(next_state_))
+                
+                if self.use_conv:
+                    # input channel=3 test
+                    next_state = torch.tensor(get_encoded_state(next_state_))
+                else: next_state = torch.from_numpy(next_state_).float() 
             
                   
                 
@@ -697,7 +708,7 @@ class ConnectFourDQNAgent(nn.Module):
             new_model.target_net.eval()
             new_model.eps = 0.1
             
-            pool = deque([new_model], maxlen=1000)
+            pool = deque([new_model], maxlen=200)
         # models 딕셔너리는 전역 변수로 사용하므로, players로 변경 
         else: players = {1: self, 2: op_model}
 
@@ -728,9 +739,10 @@ class ConnectFourDQNAgent(nn.Module):
             env.reset()
 
             state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[env.player].use_conv)
-            # state = torch.from_numpy(state_).float()
-            # input channel=3 test
-            state = torch.tensor(get_encoded_state(state_))
+            if self.use_conv:
+                # input channel=3 test
+                state = torch.tensor(get_encoded_state(state_))
+            else: state = torch.from_numpy(state_).float()
             
             done = False
 
@@ -773,9 +785,11 @@ class ConnectFourDQNAgent(nn.Module):
                     
                         
                 op_state_ = board_normalization(noise=self.noise_while_train, env=env, use_conv=players[turn].use_conv)
-                # op_state = torch.from_numpy(op_state_).float() 
-                # input channel=3 test
-                op_state = torch.tensor(get_encoded_state(op_state_))
+                # 
+                if self.use_conv:
+                    # input channel=3 test
+                    op_state = torch.tensor(get_encoded_state(op_state_))
+                else: op_state = torch.from_numpy(op_state_).float() 
             
 
                 if past_action is not None:  # 맨 처음이 아닐 때 
@@ -1228,20 +1242,20 @@ class ConnectFourDQNAgent(nn.Module):
             mask_q = Q2.reshape(-1,7,7) * m_batch
             mask_q[mask_q==0] = float('inf')
             op_qs = torch.amin(mask_q, dim=2)
-            op_qs = torch.nan_to_num(op_qs, posinf=float('-inf'))
+            op_qs = torch.nan_to_num(op_qs, posinf=-2.)
             qs = torch.nan_to_num(torch.amax(op_qs, dim=1), neginf=0.)
             Y = r_batch + self.gamma * ((1-d_batch) * qs)
             
 
         elif self.double_dqn:
             mask_q = self.policy_net(s_prime_batch) * m_batch
-            mask_q[mask_q==0] = float('-inf')
+            mask_q[mask_q==0] = -2.
             Q2 = Q2.gather(1, mask_q.argmax(dim=1).unsqueeze(dim=1)).squeeze()
             Y = r_batch + self.gamma * NSIOP*((1-d_batch)* Q2)
 
         else:
             mask_q = Q2 * m_batch
-            mask_q[mask_q==0] =float('-inf')
+            mask_q[mask_q==0] = -2.
             Y = r_batch + self.gamma * NSIOP*((1-d_batch) * torch.amax(mask_q,dim=1))
         
         # 해당하는 action을 취한 q value들
@@ -1766,14 +1780,16 @@ class HeuristicAgent():
 
     # normalize 된 board를 다시 1과 2로 바꿔줌
     def arr2board(self, state):
-        # state_ = copy.deepcopy(np.array(state.reshape(6,7)))
-        # state_ = np.round(state_).astype(int)
-        # state_[state_==-1] = 2
-        # input channel=3 test
-        state_ = np.zeros((6,7))
-        state_[state[0].cpu()==1] = -1
-        state_[state[1].cpu()==1] = 0
-        state_[state[2].cpu()==1] = 1
+        if state.ndim==2:
+            state_ = copy.deepcopy(np.array(state.reshape(6,7)))
+            state_ = np.round(state_).astype(int)
+            state_[state_==-1] = 2
+        elif state.ndim==3:
+            # input channel=3 test
+            state_ = np.zeros((6,7))
+            state_[state[0].cpu()==1] = -1
+            state_[state[1].cpu()==1] = 0
+            state_[state[2].cpu()==1] = 1
         return state_
     
     def put_piece(self, board, col, player):
@@ -1857,7 +1873,6 @@ class HeuristicAgent():
                         return col
 
         return np.random.choice(valid_actions)
-
 
 
 ### m0nd2y

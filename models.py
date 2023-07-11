@@ -166,13 +166,13 @@ class MinimaxModel():
         self.model_name = 'Minimax-tree'
 
 class ResNetforDQN(nn.Module):
-    def __init__(self, num_blocks=3, num_hidden=64, action_size=7):
+    def __init__(self, input_channel=3, num_blocks=5, num_hidden=128, action_size=7):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_type = 'CNN'
         self.model_name = 'DQN-ResNet-v1'
         self.start_block = nn.Sequential(
-            nn.Conv2d(1, num_hidden, kernel_size=3, padding=1),
+            nn.Conv2d(input_channel, num_hidden, kernel_size=3, padding=1),
             nn.BatchNorm2d(num_hidden),
             nn.ReLU()
         )
@@ -218,7 +218,7 @@ class ResNetforDQN(nn.Module):
         return q.data.cpu().numpy()[0]
 
 class AlphaZeroResNet(nn.Module):
-    def __init__(self, num_blocks=3, num_hidden=64):
+    def __init__(self, input_channel=3, num_blocks=5, num_hidden=128):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_name = 'AlphaZero-ResNet-v1'
@@ -303,10 +303,10 @@ class DQNModel:
                 exit()
 
         if self.command == '111':
-            self.model = ResNetforDQN(num_blocks=5,num_hidden=128,action_size=49)
+            self.model = ResNetforDQN(action_size=49)
             self.model.model_name = 'DQN-resnet-minimax-v1'
         elif self.command == '110':
-            self.model = ResNetforDQN(num_blocks=5,num_hidden=128,action_size=7)
+            self.model = ResNetforDQN(action_size=7)
             self.model.model_name = 'DQN-resnet-v1'
         elif self.command == '101':
             self.model = CFCNN(action_size=49)

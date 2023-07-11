@@ -4,23 +4,41 @@ import math
 from env import ConnectFour, MCTS_alphago, Node_alphago
 from models import ResNetforDQN
 import copy
+import torch.nn as nn
 
+
+class Classifier(nn.Module):
+    def __init__(self):
+        super(Classifier, self).__init__()
+        self.fc1 = nn.Linear(42, 84)  # 입력 크기: 42, 출력 크기: 임의로 설정한 중간 층 크기
+        self.fc2 = nn.Linear(84, 3)  # 입력 크기: 중간 층 크기, 출력 크기: 클래스 수
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        # x = x.view(x.size(0), -1)  # 2차원 배열을 1차원으로 평탄화
+        x = x.flatten()  # 일반적인 사용을 위해 수정
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+    
 CF = ConnectFour()
 args = {
-    'C': 2,
+    'C': 1,
     'num_searches': 100,
-    'dirichlet_epsilon': 0.5,
+    'dirichlet_epsilon': 0.25,
     'dirichlet_alpha': 1,
     'temperature':2
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = ResNetforDQN(action_size=49)
-model.load_state_dict(torch.load("model/model_9/selfplayModel9_DQN-ResNet-v1.pth", map_location=device))
+model.load_state_dict(torch.load("model/models_for_V_net/model_RL/Model81_DQN-resnet-minimax-v1.pth",  map_location=device))
 model.eval()
 
+value_model = Classifier().to(device)
+value_model.load_state_dict(torch.load("model/models_for_V_net/ValueNetwork.pth", map_location=device))
 
-mcts = MCTS_alphago(CF, args, model,value_model=None)
+mcts = MCTS_alphago(CF, args, model,value_model=value_model)
 
 state = CF.get_initial_state()
 # state = torch.from_numpy(state).float().unsqueeze(0).unsqueeze(0)
@@ -30,7 +48,7 @@ state = CF.get_initial_state()
 # action_probs = mcts.search(state)
 # print(action_probs)
 player = np.random.choice([1,-1])
-
+# player = -1
 
 
 

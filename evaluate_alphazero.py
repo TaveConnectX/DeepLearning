@@ -9,17 +9,30 @@ import numpy as np
 import torch
 import random
 import os 
+import torch.nn as nn
 
+class Classifier(nn.Module):
+    def __init__(self):
+        super(Classifier, self).__init__()
+        self.fc1 = nn.Linear(42, 84)  # 입력 크기: 42, 출력 크기: 임의로 설정한 중간 층 크기
+        self.fc2 = nn.Linear(84, 3)  # 입력 크기: 중간 층 크기, 출력 크기: 클래스 수
+        self.relu = nn.ReLU()
 
+    def forward(self, x):
+        # x = x.view(x.size(0), -1)  # 2차원 배열을 1차원으로 평탄화
+        x = x.flatten()  # 일반적인 사용을 위해 수정
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 use_search = False
-alphazero = False
+alphazero = True
 CF = ConnectFour()
 print("what the...")
 args = {
-    'C': 1,
+    'C': 1.5,
     'num_searches': 100,
     'dirichlet_epsilon': 0.,
     'dirichlet_alpha': 0.3
@@ -31,16 +44,17 @@ player = np.random.choice([1,-1])
 # alphago 일 경우
 if not alphazero:
     model = ResNetforDQN(num_blocks=5,num_hidden=128,action_size=49)
-    model.load_state_dict(torch.load("model/model_67/Model67_DQN-resnet-minimax-v1.pth", map_location=device))
+    model.load_state_dict(torch.load("model/model_81/Model81_DQN-resnet-minimax-v1.pth", map_location=device))
     model.eval()
-
-    mcts = MCTS_alphago(CF, args, model,value_model=None)
+    value_model = Classifier().to(device)
+    value_model.load_state_dict(torch.load("model/models_for_V_net/ValueNetwork.pth", map_location=device))
+    mcts = MCTS_alphago(CF, args, model,value_model=value_model)
 
 
 # alphazero 일 경우
 else:
-    model_num, iter = 21, 3
-    model = AlphaZeroResNet(5,128).to(device)
+    model_num, iter = 21, 4
+    model = AlphaZeroResNet().to(device)
     model.load_state_dict(torch.load("model/alphazero/model_{}/model_{}_iter_{}.pth".format(model_num,model_num,iter), map_location=device))
     model.eval()
     mcts = MCTS(CF, args, model)
@@ -125,8 +139,9 @@ def compare_model(model1, model2, n_battle=10):
                 # print("{},{}prev".format(round,a_cnt))
                 valid_moves = (state_[0] == 0).astype(np.uint8)
                 if not use_search:
+                    encoded_state =  torch.tensor(get_encoded_state(state), device=device).unsqueeze(0)
                     if alphazero:
-                        encoded_state =  torch.tensor(get_encoded_state(state), device=device).unsqueeze(0)
+                        
                         action_probs, value = players[turn](encoded_state)
                         #print(action_probs, value, valid_moves)
                         action_probs = action_probs.detach().cpu().numpy() * valid_moves
@@ -134,21 +149,20 @@ def compare_model(model1, model2, n_battle=10):
                         action_probs /= np.sum(action_probs)
                         action = np.argmax(action_probs)
                         
-                    else:
-                        encoded_state = state.clone().detach().to(device).unsqueeze(0).unsqueeze(0)
-                        
+                    else:                        
                         q_values = players[turn](encoded_state)
-                        print(q_values.reshape(7,7))
+                        # print(q_values.reshape(7,7))
                         # prints()
                         vas = np.where(valid_moves==1)[0]
-                        action_probs, op_action_probs, value = get_nash_prob_and_value(q_values,vas)
-                        action_probs = action_probs/action_probs.sum()
+                        action_probs, value = mcts.get_minimax_prob_and_value(q_values, valid_moves)
+                        # action_probs, op_action_probs, value = get_nash_prob_and_value(q_values,vas)
+                        # action_probs = action_probs/action_probs.sum()
                         
                         # action = np.random.choice(vas, p=action_probs)
                         action = vas[np.argmax(action_probs)]
-                        print(state)
-                        print(action_probs, op_action_probs, value)
-                        print(action)
+                        # print(state)
+                        # print(action_probs, op_action_probs, value)
+                        # print(action)
                         
                     
                     
@@ -158,7 +172,7 @@ def compare_model(model1, model2, n_battle=10):
                     
                 
                 else:
-                    mcts_probs = mcts.search(state_)
+                    mcts_probs = mcts.search(np.array(state_))
                     action = np.argmax(mcts_probs)
                 # print("{}after".format(a_cnt))
                 # print(mcts_probs, action)
